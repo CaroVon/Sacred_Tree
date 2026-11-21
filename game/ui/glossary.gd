@@ -1,0 +1,93 @@
+class_name Glossary
+extends RefCounted
+## 规则与名词：图鉴里的词条。每个词条可以带一棵演示树（demo 为 build_demo 的键）。
+
+const TERMS := [
+	{"name": "树心", "demo": &"seed",
+		"text": "牌桌中央的黑色六边形，所有养分的源头。每回合结束时输出养分：春 1、夏 2、秋 4、冬 8（第 y 年再 ×y；天灾季同冬季）。树心有 3 个芽点。"},
+	{"name": "芽点与朝向", "demo": &"buds",
+		"text": "牌上伸出的粉色短线就是芽点，新牌只能接在空着的芽点上。\n芽点以牌的「朝向」为前方——朝向就是它从父牌长出来的方向。茎只有正前方 1 个芽点；分叉是左前、右前 2 个；三叉是左前、正前、右前 3 个。所以同一张分叉放在不同位置，会把树引向完全不同的方向。\n芽点指向已被占用、出界、岩石或泉眼的格子时，画成灰色 ×，接不上。"},
+	{"name": "为什么接不上？", "demo": &"blocked",
+		"text": "选中手牌后把鼠标移到想放的格子上，提示栏会写明原因。常见原因：\n① 没有任何芽点指向这里（看粉色短线）；\n② 旁边是末端牌（果、花、浆果……没有芽点）；\n③ 芽点全被占了——用「修剪」腾出空间；\n④ 岩石、泉眼上不能长；\n⑤ 古木要求深度 ≥3；\n⑥ 藤要放在同时挨着 2 个末梢的空格上。"},
+	{"name": "深度", "demo": &"depth",
+		"text": "从树心往外数第几张牌。树心是 0，每往外接一张 +1（嫁接时取父牌中最深的 +1）。\n「节」按深度加值；「古木」要求深度 ≥3；长茎牌型要求末梢深度 ≥6。"},
+	{"name": "末梢", "demo": &"tips",
+		"text": "没有子牌的牌，用粉色虚线框标出。只有末梢计分：所有末梢的收获加起来就是本回合得分。\n往一个末梢后面接牌，它就不再是末梢，养分会继续往后流——所以放牌可能让分数先降后升。末梢下方的粉色「收 N」就是它本回合的收获。"},
+	{"name": "脉动与计分", "demo": &"pulse",
+		"text": "结束回合时神树脉动一次：养分从树心出发沿枝干流动，每经过一张牌按它的效果加工（+3、×2……），遇到分叉复制成多份，最后在每个末梢收获。\n对局中把鼠标悬停在任意一张牌上，牌桌会播放养分流到它为止的过程，左上角显示完整算式。"},
+	{"name": "七类牌", "demo": &"",
+		"text": "传导：接在枝干中间，加工流过的养分（茎、节、古木、树瘤）。\n分枝：多个芽点，养分复制成多份（分叉、三叉、侧枝、掌叉、回旋枝）。\n末端：没有芽点，天然的末梢，放大收获（果、金果、浆果、种荚）。\n相邻：不靠枝干，给挨着的格子加成（花、蜜花、苔）。\n嫁接：把几个相邻末梢汇合（藤相乘、连理藤相加）。\n时间：随脉动次数变化（新芽、心材、花苞）。\n修剪：剪掉时有收益（枯枝、朽木、落叶）。"},
+	{"name": "嫁接", "demo": &"graft",
+		"text": "藤放在同时挨着 2 个以上末梢的空格上，把它们都当作父牌：几股养分在藤处相乘，藤成为新的末梢，原来那几个末梢不再单独计分。两个 8 相乘就是 64，远超分开相加的 16。"},
+	{"name": "成熟", "demo": &"",
+		"text": "牌每经历一次脉动，年龄 +1。果、金果每次脉动倍率 +0.5（果最多 ×4、金果最多 ×5）；新芽每次 +1；心材每次倍率 +0.25；花苞前两次脉动无效果，之后 +12。越早种下的牌越值钱，所以别轻易剪掉老果子。"},
+	{"name": "修剪", "demo": &"",
+		"text": "每回合可以修剪 1 次：剪掉一张牌和它后面的所有枝，被剪的牌回到弃牌堆。每张得 1 养分（枯枝 3、种荚 5、朽木 6）。修剪既能腾出芽点，又能换养分——养分可以重抽手牌，也是集市的货币。"},
+	{"name": "牌型", "demo": &"",
+		"text": "长茎：末梢深度 ≥6，该末梢收获 ×2。\n星芒：一张牌直接长出 3 条子枝，它流出的养分 ×2。\n闭环：藤的几个父牌能追溯到同一张牌（不算树心），这根藤 ×2。\n对称：除树心外 ≥6 张牌，且每张牌在以树心为中心的对称位置上都有同种牌，本回合总分 ×1.5。"},
+	{"name": "季节与目标", "demo": &"",
+		"text": "一局三年，每年春、夏、秋、冬四季加一个 3 回合的天灾季；每季 5 回合，累计分要达到目标，否则神树停止生长。\n季节特性：春每回合多抽 1 张；夏每回合多放 1 张；秋末端牌 ×1.5；冬季末最老的 3 个末梢枯萎。"},
+	{"name": "土地", "demo": &"land",
+		"text": "沃土（网点）：长在上面的牌流出养分 +2。\n岩石（碎纸片）：不能生长。\n泉眼（水纹）：不能生长，但相邻的末梢收获 +2。\n开局随机生成，每年再长出几块，集市里可以清除岩石或养出沃土。"},
+	{"name": "年轮、器物、天灾、集市", "demo": &"",
+		"text": "年轮印记刻在树上的某张牌上：坚韧（不会枯萎、不受天灾）、繁茂（多 1 个芽点）、丰饶（流出 +2）。\n器物改变全局规则，度过天灾后三选一。\n天灾：干旱（树心输出减半）、虫害（每次脉动咬掉一个末梢）、雷击（劈断最长的一条枝）。\n集市在每年天灾之后：用养分买牌、删牌、刻年轮、改造土地。"},
+]
+
+
+static func _put(t: TreeModel, type: StringName, parent: Vector2i, dir: int) -> TreeNode:
+	var info := Growth.Target.new()
+	info.parents = [parent]
+	info.facing = dir
+	return Growth.place(t, type, parent + Hex.DIRS[dir], info)
+
+
+## 返回 {tree, pick: 需要高亮的格子}
+static func build_demo(id: StringName) -> Dictionary:
+	var t := TreeModel.create(Rules.RADIUS)
+	var pick: Array[Vector2i] = []
+	match id:
+		&"seed":
+			pick.append(Vector2i.ZERO)
+		&"buds":
+			var s := _put(t, &"stem", Vector2i.ZERO, 1)
+			var f := _put(t, &"fork", s.key, 1)
+			t.land[f.key + Hex.DIRS[2]] = Land.Type.ROCK
+			pick.append(f.key)
+		&"blocked":
+			for d in [1, 3, 5]:
+				_put(t, &"fruit", Vector2i.ZERO, d)
+			pick.assign([Hex.DIRS[1], Hex.DIRS[3], Hex.DIRS[5]])
+		&"depth":
+			var prev := Vector2i.ZERO
+			for i in 4:
+				prev = _put(t, &"node", prev, 1).key
+				pick.append(prev)
+		&"tips":
+			var s := _put(t, &"stem", Vector2i.ZERO, 1)
+			var f := _put(t, &"fork", s.key, 1)
+			pick.append(_put(t, &"fruit", f.key, 0).key)
+			pick.append(_put(t, &"stem", f.key, 2).key)
+			pick.append(_put(t, &"flower", Vector2i.ZERO, 3).key)
+		&"pulse":
+			var s := _put(t, &"stem", Vector2i.ZERO, 1)
+			var f := _put(t, &"fork", s.key, 1)
+			_put(t, &"fruit", f.key, 0)
+			var s2 := _put(t, &"stem", f.key, 2)
+			_put(t, &"fruit", s2.key, 2)
+		&"graft":
+			var s := _put(t, &"stem", Vector2i.ZERO, 1)
+			var f := _put(t, &"fork", s.key, 1)
+			var a := _put(t, &"fruit", f.key, 0)
+			var b := _put(t, &"fruit", f.key, 2)
+			var info := Growth.Target.new()
+			info.parents = [a.key, b.key]
+			var v := Growth.place(t, &"vine", f.key + Hex.DIRS[1], info)
+			pick.append(v.key)
+		&"land":
+			t.land[Vector2i(2, -1)] = Land.Type.FERTILE
+			t.land[Vector2i(-2, 1)] = Land.Type.ROCK
+			t.land[Vector2i(1, 1)] = Land.Type.SPRING
+			_put(t, &"stem", Vector2i.ZERO, 5)
+		_:
+			return {}
+	return {"tree": t, "pick": pick}

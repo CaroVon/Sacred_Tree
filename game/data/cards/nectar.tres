@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="CardDef" format=3]
+
+[ext_resource type="Script" path="res://core/card_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"nectar"
+display_name = "蜜花"
+category = 3
+ports = PackedInt32Array()
+effect = 0
+value = 0.0
+color_key = &"pink"
+price = 6
+desc = "末端，不加值；相邻的其他末梢各 +6"
+aura = 6

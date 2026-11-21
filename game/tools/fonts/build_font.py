@@ -1,0 +1,130 @@
+#!/usr/bin/env python3
+"""子集化思源宋体 (Noto Serif SC) 到游戏实际用到的字符。
+
+用法:
+    python game/tools/fonts/build_font.py            # 下载 + 子集化
+    python game/tools/fonts/build_font.py --no-download   # 只用本地缓存
+
+产物: game/assets/fonts/NotoSerifSC-Subset.ttf
+"""
+from __future__ import annotations
+
+import argparse
+import re
+import sys
+import unicodedata
+import urllib.request
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[3]
+GAME = ROOT / "game"
+OUT_FONT = GAME / "assets" / "fonts" / "NotoSerifSC-Subset.ttf"
+CACHE = Path.home() / "AppData" / "Local" / "Temp" / "opencode" / "fontwork"
+SRC_URL = "https://github.com/notofonts/noto-cjk/raw/main/Serif/SubsetOTF/SC/NotoSerifSC-Regular.otf"
+SRC_FILE = CACHE / "NotoSerifSC-Regular.otf"
+
+# 扫描范围：所有会被显示出来的文本来源。
+SCAN_GLOBS = [
+    ("**/*.gd", GAME),
+    ("**/*.tres", GAME),
+    ("**/*.tscn", GAME),
+    ("*.html", ROOT),
+    ("*.md", ROOT),
+    ("**/*.md", GAME),
+]
+
+# 永远保留：ASCII、常用标点、数字符号、以及可能被运行期拼接的字符。
+ALWAYS = (
+    "".join(chr(c) for c in range(0x20, 0x7F))
+    + "　、。，．：；！？「」『』（）【】《》〈〉—…·×÷±°％‰"
+    + "①②③④⑤⑥⑦⑧⑨⑩"
+    + "ⅠⅡⅢⅣⅤ"
+    + "←→↑↓✓▼▲●○■□"
+    + "abcdefghijklmnopqrstuvwxyz"
+    + "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    + "0123456789"
+)
+
+# 运行期动态生成、源码里未必出现的常用字兜底。
+EXTRA = (
+    "神树养分脉动末梢树心枝干分枝嫁接修剪天灾器物集市牌组图鉴"
+    "春夏秋冬四季回合结束开始继续退出设置音量减少动效"
+    "确认取消返回主菜单重新继续结算单奖励选择跳过"
+    "深浅高低新旧破旧好差多少大小加减乘除倍"
+    "一二三四五六七八九十百千万零"
+)
+
+
+def collect_chars() -> set[str]:
+    chars: set[str] = set(ALWAYS) | set(EXTRA)
+    for pattern, base in SCAN_GLOBS:
+        for path in base.glob(pattern):
+            if path.suffix == ".html" and base == ROOT:
+                pass
+            try:
+                text = path.read_text(encoding="utf-8", errors="ignore")
+            except OSError:
+                continue
+            for ch in text:
+                if ch in "\r\n\t":
+                    continue
+                # 只保留可打印字符（CJK、全角标点、拉丁、符号）。
+                if unicodedata.category(ch)[0] in ("C", "Z"):
+                    continue
+                chars.add(ch)
+    # 去掉控制字符
+    return {c for c in chars if c.isprintable() or c == " "}
+
+
+def download(force: bool = False) -> Path:
+    CACHE.mkdir(parents=True, exist_ok=True)
+    if SRC_FILE.exists() and not force:
+        print(f"[font] 使用缓存 {SRC_FILE}")
+        return SRC_FILE
+    print(f"[font] 下载 {SRC_URL}")
+    with urllib.request.urlopen(SRC_URL, timeout=180) as resp:
+        data = resp.read()
+    SRC_FILE.write_bytes(data)
+    print(f"[font] 已保存 {SRC_FILE} ({len(data) / 1e6:.1f} MB)")
+    return SRC_FILE
+
+
+def subset(src: Path, chars: set[str], out: Path) -> None:
+    from fontTools import subset as ft_subset
+
+    opts = ft_subset.Options()
+    opts.layout_features = ["kern", "liga", "vert", "vrt2", "locl", "ccmp", "mark", "mkmk"]
+    opts.name_IDs = ["*"]
+    opts.notdef_outline = True
+    opts.recalc_bounds = True
+    opts.drop_tables = ["DSIG"]
+    opts.desubroutinize = True
+
+    font = ft_subset.load_font(str(src), opts)
+    subsetter = ft_subset.Subsetter(options=opts)
+    subsetter.populate(text="".join(sorted(chars)))
+    subsetter.subset(font)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    ft_subset.save_font(font, str(out), opts)
+    print(f"[font] 字符数 {len(chars)} -> {out} ({out.stat().st_size / 1024:.0f} KB)")
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--no-download", action="store_true")
+    args = ap.parse_args()
+
+    chars = collect_chars()
+    print(f"[font] 扫描到 {len(chars)} 个字符")
+    src = SRC_FILE
+    if not src.exists():
+        if args.no_download:
+            print("[font] 缺少源字体且指定了 --no-download", file=sys.stderr)
+            return 1
+        src = download()
+    subset(src, chars, OUT_FONT)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="CardDef" format=3]
+
+[ext_resource type="Script" path="res://core/card_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"berry"
+display_name = "浆果"
+category = 2
+ports = PackedInt32Array()
+effect = 1
+value = 6.0
+color_key = &"red"
+price = 4
+desc = "+6，末端"

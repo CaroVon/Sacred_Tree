@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>神树 · 游戏设计与实现方案</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=ZCOOL+XiaoWei&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#E9E8E3; --sheet:#F6F5F1; --ink:#1B2430; --soft:#4F5866; --rule:#C9C7BF; --cell:#DFDDD5;
+  --green:#00A95C; --blue:#0078BF; --red:#FF5A2C; --gold:#C99700; --pink:#E8459A; --grey:#8A8F98;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --paper:#15191F; --sheet:#1E232B; --ink:#E6E4DE; --soft:#A9AFB8; --rule:#353C47; --cell:#252B34;
+    --green:#2BC27A; --blue:#3A9BE0; --red:#FF7A52; --gold:#E8B828; --pink:#F06AAE; --grey:#7C828C;
+    color-scheme: dark;
+  }
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:"Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif;font-size:16px;line-height:1.75}
+a{color:var(--blue)}
+a:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.layout{display:grid;grid-template-columns:210px minmax(0,1fr);gap:48px;max-width:1220px;margin:0 auto;padding:48px 32px 96px}
+nav.toc{position:sticky;top:28px;align-self:start;font-size:14px}
+nav.toc p{margin:0 0 10px;color:var(--soft)}
+nav.toc ol{margin:0;padding-left:20px;color:var(--soft)}
+nav.toc li{margin-bottom:5px}
+nav.toc a{color:var(--soft);text-decoration:none}
+nav.toc a:hover{color:var(--ink)}
+nav.toc .part{list-style:none;margin:14px 0 6px -20px;color:var(--ink);font-weight:500}
+main{min-width:0}
+h1,h2,h3{font-family:"ZCOOL XiaoWei","Noto Serif SC",serif;font-weight:400;line-height:1.3;margin:0}
+h1{font-size:clamp(40px,6vw,64px);position:relative;display:inline-block}
+h1 .ghost{position:absolute;left:4px;top:4px;color:var(--green);opacity:.5;pointer-events:none}
+h1 .real{position:relative}
+.lead{max-width:66ch;color:var(--soft);margin:14px 0 0;font-size:17px}
+.part-title{font-family:"ZCOOL XiaoWei",serif;font-size:22px;color:var(--soft);border-top:2px solid var(--ink);padding-top:10px;margin:72px 0 28px}
+section{margin:0 0 64px;scroll-margin-top:20px}
+h2{font-size:30px;margin:0 0 10px}
+h3{font-size:21px;margin:30px 0 8px}
+p{max-width:72ch;margin:0 0 14px}
+ul.plain{max-width:72ch;padding-left:20px;margin:0 0 14px}
+ul.plain li{margin-bottom:6px}
+.note{border-left:3px solid var(--green);background:var(--sheet);padding:14px 18px;margin:16px 0;max-width:76ch}
+.note p:last-child{margin:0}
+table{border-collapse:collapse;width:100%;margin:12px 0 20px;font-size:15px;background:var(--sheet)}
+th,td{border-bottom:1px solid var(--rule);padding:9px 12px;text-align:left;vertical-align:top}
+th{font-weight:500;color:var(--soft);border-bottom:2px solid var(--ink)}
+td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tw{overflow-x:auto}
+pre{background:var(--sheet);border:1px solid var(--rule);padding:14px 16px;overflow-x:auto;font-size:13.5px;line-height:1.55;margin:12px 0 18px}
+code{font-family:"JetBrains Mono","SFMono-Regular",Consolas,monospace}
+p code,li code,td code{background:var(--sheet);padding:0 4px;font-size:.92em}
+ol.steps{max-width:74ch;padding-left:22px}
+ol.steps li{margin-bottom:10px}
+.swatch{display:inline-block;width:10px;height:10px;margin-right:6px;transform:translateY(-1px)}
+.entry{display:inline-block;margin:8px 0 4px;padding:10px 16px;border:1.5px solid var(--ink);box-shadow:4px 4px 0 var(--green);background:var(--sheet);color:var(--ink);text-decoration:none;font-weight:500}
+figure{margin:16px 0 22px}
+figure svg{max-width:520px;width:100%;height:auto;display:block;background:var(--sheet);border:1px solid var(--rule)}
+figcaption{font-size:14px;color:var(--soft);margin-top:6px;max-width:72ch}
+@media (max-width:880px){.layout{grid-template-columns:1fr;padding:28px 18px 72px;gap:20px}nav.toc{position:static}}
+</style>
+</head>
+<body>
+<div class="layout">
+<nav class="toc" aria-label="目录">
+  <p>目录</p>
+  <ol>
+    <li class="part">设计</li>
+    <li><a href="#concept">概念</a></li>
+    <li><a href="#loop">核心循环</a></li>
+    <li><a href="#board">牌桌与生长</a></li>
+    <li><a href="#pulse">脉动计分</a></li>
+    <li><a href="#cards">牌</a></li>
+    <li><a href="#dims">四个作用维度</a></li>
+    <li><a href="#run">对局结构</a></li>
+    <li><a href="#complex">复杂度控制</a></li>
+    <li><a href="#art">美术与表现</a></li>
+    <li class="part">实现</li>
+    <li><a href="#stack">技术选型</a></li>
+    <li><a href="#refs">开源参考</a></li>
+    <li><a href="#arch">架构</a></li>
+    <li><a href="#env">环境搭建</a></li>
+    <li><a href="#entry">游戏入口</a></li>
+    <li><a href="#milestones">实现步骤</a></li>
+  </ol>
+</nav>
+
+<main>
+<header>
+  <h1><span class="ghost" aria-hidden="true">神树</span><span class="real">神树</span></h1>
+  <p class="lead">一款生长型卡牌构筑游戏。玩家在六边形土地上培育一棵神树，每回合把牌接到枝头，回合结束时养分从树心出发，沿枝干流向所有末梢。树的形状就是牌型，长得越茂盛，收获越多。</p>
+</header>
+
+<div class="part-title">第一部分 · 游戏设计</div>
+
+<section id="concept">
+  <h2>概念</h2>
+  <p><strong>背景（初稿）：</strong>大地干涸，只剩一颗神树之种。玩家是守林人，用手中的枝叶牌让它重新生长。神树每年经历四季，每一季都要收获足够的养分，否则就会停止生长。三年之后，神树成年。</p>
+  <p>背景只承担两件事：解释"牌桌会生长并且保留下来"，以及用四季构成自然的大小单局节奏。不需要更多剧情。</p>
+  <div class="note">
+    <p><strong>一句话卖点：</strong>你的牌组决定能长出什么，你的摆放决定长成什么样。树的形状本身就是计分规则。</p>
+  </div>
+  <h3>和同类游戏的区别</h3>
+  <ul class="plain">
+    <li>小丑牌一类游戏：每轮清空桌面重新出牌。本作的牌桌持续存在，每一张牌都会影响之后很多回合。</li>
+    <li>The Loopler 一类顺序结算游戏：沿固定轨道按序触发。本作的结构是玩家自己长出来的分叉网络，路径数量随形状几何增长。</li>
+    <li>地块拼放类游戏：按相邻关系一次性计分。本作有方向性的"流"，同一张牌放在主干上还是末梢上，作用完全不同。</li>
+  </ul>
+</section>
+
+<section id="loop">
+  <h2>核心循环</h2>
+  <div class="tw"><table>
+    <tr><th>层级</th><th>名称</th><th>内容</th><th>时长</th></tr>
+    <tr><td>回合</td><td>一次生长</td><td>抽牌到 4 张，最多放 2 张、修剪 1 次，然后脉动计分</td><td>20 到 40 秒</td></tr>
+    <tr><td>小单局</td><td>一季</td><td>5 个回合，累计养分达到本季目标</td><td>3 到 4 分钟</td></tr>
+    <tr><td>中单局</td><td>一年</td><td>春夏秋冬四季，冬末有天灾考验</td><td>15 分钟左右</td></tr>
+    <tr><td>大单局</td><td>一局</td><td>三年，神树成年即通关</td><td>45 到 60 分钟</td></tr>
+  </table></div>
+  <p>这个结构直接落实了"大单局加小单局"的设想：<strong>小单局是一季</strong>，几分钟打完，随时可以停；<strong>大单局的粘性来自树本身</strong>，因为神树跨季保留，玩家在第一年春天种下的那根主干，到第三年冬天还在为整棵树输送养分。每一季结束时自动存档。</p>
+</section>
+
+<section id="board">
+  <h2>牌桌与生长</h2>
+  <h3>底层：六边形网格</h3>
+  <p>牌桌是半径为 4 的六边形区域，共 61 格。中心是神树之种。底层用轴向坐标 <code>(q, r)</code> 存储，每格有 6 个相邻方向，计算和读取都是离散的；表现层可以加入轻微旋转、弯曲的枝干和散落的叶片，让它看起来是自由生长的。</p>
+
+  <h3>芽点与朝向</h3>
+  <p>每张牌都有一个<strong>朝向</strong>，就是它从父牌长出来的方向。牌的芽点以朝向为基准定义：</p>
+  <figure>
+    <svg viewBox="0 0 520 170" role="img" aria-label="四种芽点形状示意">
+      <g font-family="Noto Sans SC" font-size="13" fill="currentColor" style="color:var(--ink)">
+        <g transform="translate(70,90)">
+          <line x1="-40" y1="0" x2="0" y2="0" stroke="var(--grey)" stroke-width="3"/>
+          <circle r="14" fill="var(--sheet)" stroke="var(--green)" stroke-width="3"/>
+          <line x1="14" y1="0" x2="44" y2="0" stroke="var(--pink)" stroke-width="3" stroke-dasharray="4 3"/>
+          <text x="0" y="50" text-anchor="middle">直茎：1 个芽点</text>
+        </g>
+        <g transform="translate(200,90)">
+          <line x1="-40" y1="0" x2="0" y2="0" stroke="var(--grey)" stroke-width="3"/>
+          <circle r="14" fill="var(--sheet)" stroke="var(--blue)" stroke-width="3"/>
+          <line x1="10" y1="-10" x2="32" y2="-36" stroke="var(--pink)" stroke-width="3" stroke-dasharray="4 3"/>
+          <line x1="10" y1="10" x2="32" y2="36" stroke="var(--pink)" stroke-width="3" stroke-dasharray="4 3"/>
+          <text x="0" y="62" text-anchor="middle">分叉：±60°</text>
+        </g>
+        <g transform="translate(330,90)">
+          <line x1="-40" y1="0" x2="0" y2="0" stroke="var(--grey)" stroke-width="3"/>
+          <circle r="14" fill="var(--sheet)" stroke="var(--blue)" stroke-width="3"/>
+          <line x1="14" y1="0" x2="44" y2="0" stroke="var(--pink)" stroke-width="3" stroke-dasharray="4 3"/>
+          <line x1="10" y1="-10" x2="32" y2="-36" stroke="var(--pink)" stroke-width="3" stroke-dasharray="4 3"/>
+          <line x1="10" y1="10" x2="32" y2="36" stroke="var(--pink)" stroke-width="3" stroke-dasharray="4 3"/>
+          <text x="0" y="62" text-anchor="middle">三叉：三个方向</text>
+        </g>
+        <g transform="translate(450,90)">
+          <line x1="-40" y1="0" x2="0" y2="0" stroke="var(--grey)" stroke-width="3"/>
+          <circle r="14" fill="var(--sheet)" stroke="var(--red)" stroke-width="3"/>
+          <text x="0" y="50" text-anchor="middle">末端：无芽点</text>
+        </g>
+      </g>
+    </svg>
+    <figcaption>灰线是父牌方向，粉色虚线是芽点。因为芽点跟着朝向转，同一张分叉放在不同位置，会把树引向完全不同的地方，也可能撞上已有的枝而被堵住。</figcaption>
+  </figure>
+  <p>新牌只能放在某个空芽点指向的空格上。被其他牌占据的方向，芽点自动失效。这意味着树会自己"挤"自己，玩家需要规划空间，或者用修剪腾地方。</p>
+
+  <h3>生长的四个维度</h3>
+  <div class="tw"><table>
+    <tr><th>维度</th><th>表现</th><th>原型阶段</th></tr>
+    <tr><td>扩张</td><td>把新牌接在芽点上，占据新的格子</td><td>已实现</td></tr>
+    <tr><td>凋亡</td><td>修剪一段枝，或枝在冬季枯萎，腾出空间并换取养分</td><td>修剪已实现，枯萎待加</td></tr>
+    <tr><td>连接</td><td>用藤把相邻的末梢嫁接在一起，养分汇合相乘</td><td>已实现</td></tr>
+    <tr><td>成熟</td><td>牌留在树上越久越强，例如果实每经历一次脉动倍率 +0.5</td><td>第二阶段加入</td></tr>
+  </table></div>
+</section>
+
+<section id="pulse">
+  <h2>脉动计分</h2>
+  <p>每回合结束时，神树脉动一次。养分从树心出发，按照以下规则流动：</p>
+  <ol class="steps">
+    <li><strong>传导：</strong>养分沿枝干依次经过每张牌，被逐张加工，例如 +3、×2。</li>
+    <li><strong>分叉复制：</strong>养分到达分叉时复制成多份，每份各自继续流动。</li>
+    <li><strong>末梢收获：</strong>没有子牌的牌就是末梢。所有末梢的养分相加，就是本回合得分。</li>
+    <li><strong>相邻：</strong>挨着但不相连的牌之间不流动养分，只触发相邻效果，例如花让相邻的其他末梢各 +3。</li>
+    <li><strong>嫁接：</strong>藤放在同时挨着两个以上末梢的空格上，把它们都连成自己的父牌。几股养分在藤处相乘，藤成为新的末梢。</li>
+  </ol>
+  <h3>计分示例</h3>
+<pre><code>树心(1) → 茎(+3) = 4 → 分叉
+                       ├→ 果(×2)  = 8
+                       └→ 茎(+3) = 7 → 果(×2) = 14
+本回合得分 = 8 + 14 = 22
+
+在两个果之间放一根藤：两个果不再是末梢
+藤 = 8 × 14 = 112，本回合得分从 22 跳到 112</code></pre>
+  <p>这就是本作乘法爽感的两个来源：<strong>分叉让路径数量几何增长</strong>，<strong>嫁接让两条路径的结果相乘</strong>。嫁接的取舍也很清楚：末梢变少了，但汇合点的乘积可能远超分开相加。</p>
+  <p>神树之心每季成熟一次，输出的养分春 1、夏 2、秋 4、冬 8。这保证了整棵树的产出跨季持续上涨，乘法结构越完整，涨得越快。</p>
+
+  <h3>几何牌型（第二阶段）</h3>
+  <div class="tw"><table>
+    <tr><th>牌型</th><th>条件</th><th>效果</th></tr>
+    <tr><td>长茎</td><td>一条路径从树心到末梢连续 6 张以上</td><td>该末梢 ×2</td></tr>
+    <tr><td>星芒</td><td>一张牌直接长出 3 条子枝</td><td>该牌效果翻倍</td></tr>
+    <tr><td>对称</td><td>以树心为中心，两侧结构镜像</td><td>本回合总分 ×1.5</td></tr>
+    <tr><td>闭环</td><td>嫁接后形成环</td><td>环内养分多流一圈</td></tr>
+  </table></div>
+  <p>牌型不需要文字说明，玩家看着自己的树就能认出来。</p>
+</section>
+
+<section id="cards">
+  <h2>牌</h2>
+  <h3>原型牌组（已在可玩原型中实现）</h3>
+  <div class="tw"><table>
+    <tr><th>牌</th><th>类别</th><th>芽点</th><th>效果</th><th class="num">起始数量</th></tr>
+    <tr><td><span class="swatch" style="background:var(--green)"></span>茎</td><td>传导</td><td>1</td><td>+3</td><td class="num">4</td></tr>
+    <tr><td><span class="swatch" style="background:var(--green)"></span>节</td><td>传导</td><td>1</td><td>+所在深度，离树心越远加得越多</td><td class="num">2</td></tr>
+    <tr><td><span class="swatch" style="background:var(--blue)"></span>分叉</td><td>分枝</td><td>2</td><td>不加值，向左右两侧分枝</td><td class="num">3</td></tr>
+    <tr><td><span class="swatch" style="background:var(--blue)"></span>三叉</td><td>分枝</td><td>3</td><td>−2，向三个方向分枝</td><td class="num">1</td></tr>
+    <tr><td><span class="swatch" style="background:var(--red)"></span>果</td><td>末端</td><td>0</td><td>×2</td><td class="num">3</td></tr>
+    <tr><td><span class="swatch" style="background:var(--pink)"></span>花</td><td>相邻</td><td>0</td><td>+1；相邻的其他末梢各 +3</td><td class="num">2</td></tr>
+    <tr><td><span class="swatch" style="background:var(--gold)"></span>藤</td><td>嫁接</td><td>—</td><td>嫁接两个以上相邻末梢，养分相乘</td><td class="num">1</td></tr>
+    <tr><td><span class="swatch" style="background:var(--grey)"></span>枯枝</td><td>修剪</td><td>1</td><td>+1；被剪掉时得 3 养分</td><td class="num">2</td></tr>
+    <tr><td><span class="swatch" style="background:var(--red)"></span>金果</td><td>末端</td><td>0</td><td>×3，只能从奖励获得</td><td class="num">0</td></tr>
+  </table></div>
+
+  <h3>扩展牌类（正式版）</h3>
+  <p>正式版沿七个类别扩展，每类 10 到 15 张，首发目标约 90 张。每张牌只用一行字说明效果。</p>
+  <div class="tw"><table>
+    <tr><th>类别</th><th>职责</th><th>示例</th></tr>
+    <tr><td>传导</td><td>在路径上加值或乘值</td><td>古木：+8，但只能接在深度 ≥3 的位置</td></tr>
+    <tr><td>分枝</td><td>改变路径数量和方向</td><td>回旋枝：芽点朝向父牌左后方，让树绕回来</td></tr>
+    <tr><td>末端</td><td>在终点放大收获</td><td>种荚：×2，脉动后在相邻空格长出一张临时茎</td></tr>
+    <tr><td>相邻</td><td>不连接也能互相影响</td><td>苔：相邻的每张传导牌效果 +1</td></tr>
+    <tr><td>嫁接</td><td>汇合路径</td><td>寄生藤：只嫁接 1 个末梢，偷取它 50% 的养分</td></tr>
+    <tr><td>时间</td><td>随回合成熟或衰老</td><td>花苞：前两次脉动无效果，第三次起 +10</td></tr>
+    <tr><td>修剪</td><td>把凋亡变成收益</td><td>落叶：被剪掉时，下次脉动所有末梢 +2</td></tr>
+  </table></div>
+</section>
+
+<section id="dims">
+  <h2>四个作用维度</h2>
+  <p>之前讨论的"卡牌、装备、印记、槽位"四个维度，在神树的设定里有了自然的对应：</p>
+  <div class="tw"><table>
+    <tr><th>维度</th><th>神树中的形态</th><th>作用对象</th><th>示例</th></tr>
+    <tr><td>卡牌</td><td>枝叶</td><td>树上的一个位置</td><td>茎、分叉、果</td></tr>
+    <tr><td>装备</td><td>守林人的器物</td><td>全局规则</td><td>修枝剪：每回合修剪 2 次；露水瓶：每季第一次脉动 ×2</td></tr>
+    <tr><td>印记</td><td>年轮</td><td>某一张牌</td><td>坚韧：这张牌不会在冬季枯萎；繁茂：这张牌多 1 个芽点</td></tr>
+    <tr><td>土地</td><td>地块</td><td>某一个格子</td><td>沃土：长在这里的牌效果 +2；岩石：无法生长；泉眼：相邻末梢 +2</td></tr>
+  </table></div>
+  <p>"槽位"在这里变成了<strong>土地</strong>。地块在每局开始时随机生成一部分，玩家也可以通过奖励改造地块。这让生长方向有了理由：玩家会刻意让枝干绕过岩石、伸向沃土。</p>
+</section>
+
+<section id="run">
+  <h2>对局结构</h2>
+  <h3>季节规则</h3>
+  <div class="tw"><table>
+    <tr><th>季节</th><th>树心输出</th><th>季节特性（第二阶段）</th></tr>
+    <tr><td>春</td><td class="num">1</td><td>每回合多抽 1 张</td></tr>
+    <tr><td>夏</td><td class="num">2</td><td>每回合多放 1 张</td></tr>
+    <tr><td>秋</td><td class="num">4</td><td>末端牌效果 ×1.5</td></tr>
+    <tr><td>冬</td><td class="num">8</td><td>季末最老的 3 个末梢枯萎；冬季末有天灾</td></tr>
+  </table></div>
+  <h3>季节目标</h3>
+  <div class="tw"><table>
+    <tr><th>年</th><th class="num">春</th><th class="num">夏</th><th class="num">秋</th><th class="num">冬</th></tr>
+    <tr><td>第一年（原型）</td><td class="num">50</td><td class="num">180</td><td class="num">500</td><td class="num">1,200</td></tr>
+    <tr><td>第二年</td><td class="num">待测</td><td class="num">待测</td><td class="num">待测</td><td class="num">待测</td></tr>
+    <tr><td>第三年</td><td class="num">待测</td><td class="num">待测</td><td class="num">待测</td><td class="num">待测</td></tr>
+  </table></div>
+  <p>第一年的目标已经用自动测试校准过：一个只看眼前一步、不会修剪也不会规划嫁接的贪心策略，大约三分之二能过春季，约八分之一能通关四季。会规划的人类玩家应该明显更高。后两年的目标需要在加入完整内容后再校准。</p>
+  <h3>奖励与天灾</h3>
+  <ul class="plain">
+    <li><strong>每季达标：</strong>三选一加一张新牌，或跳过换 3 养分。</li>
+    <li><strong>每年冬末：</strong>天灾考验，相当于首领。例如干旱让树心输出减半；虫害每回合随机咬掉一个末梢；雷击劈断最长的一条枝。</li>
+    <li><strong>度过天灾后：</strong>器物三选一，然后进入集市，用养分购买牌、年轮印记、地块改造和删牌服务。</li>
+  </ul>
+  <p>养分是唯一货币，修剪会产生养分，于是"剪掉一段枝"同时是空间决策和经济决策。</p>
+</section>
+
+<section id="complex">
+  <h2>复杂度控制</h2>
+  <ul class="plain">
+    <li><strong>只有两种关系：</strong>连接决定养分怎么流，相邻决定谁影响谁。不再增加第三种。</li>
+    <li><strong>牌只读局部：</strong>每张牌只看它的父牌、子牌和相邻格，玩家不需要推算整棵树。</li>
+    <li><strong>放置预览：</strong>把鼠标移到可放置的格子上，直接显示"下次脉动 X → Y"。计算交给游戏，玩家只做选择。原型已实现。</li>
+    <li><strong>每回合只放 2 张：</strong>每一步的决策很小，但后果会持续很多回合。</li>
+    <li><strong>复杂度随树长大：</strong>开局只有树心和 3 个芽点，生长过程本身就是教程。</li>
+    <li><strong>空间就是上限：</strong>61 格的土地会被填满，迫使玩家修剪和取舍，防止后期桌面复杂到无法阅读。</li>
+  </ul>
+  <p>两个验收指标：单次放置的思考时间在 10 到 20 秒之间；新玩家能在第一季内自己发现"分叉让收获翻倍"。</p>
+</section>
+
+<section id="art">
+  <h2>美术与表现</h2>
+  <p>延续你之前倾向的旧印刷品美学：木刻和版画质感的枝干、拼贴的叶片和果实、套色错位和网点纹理。这个方向与神树非常契合：</p>
+  <ul class="plain">
+    <li><strong>枝干：</strong>木刻线条，每一段枝用两层颜色轻微错位印出，原型里的绿色偏移线就是这个效果的占位。</li>
+    <li><strong>脉动：</strong>养分像油墨一样沿枝干流动，从树心向外依次点亮，到达末梢时溅出数字。这是全游戏唯一的高光动画。</li>
+    <li><strong>土地：</strong>纸张纹理的六边形，沃土用网点加深，岩石用拼贴的碎纸片表现。</li>
+    <li><strong>分享：</strong>每局结束导出一张"神树版画"，就是玩家亲手长出来的树，天然适合截图传播。</li>
+  </ul>
+</section>
+
+<div class="part-title">第二部分 · 实现方案</div>
+
+<section id="stack">
+  <h2>技术选型</h2>
+  <p>分两个阶段，用不同的工具：</p>
+  <div class="tw"><table>
+    <tr><th>阶段</th><th>工具</th><th>理由</th></tr>
+    <tr><td>玩法验证</td><td>原生 HTML + JavaScript（已提供）</td><td>零安装，双击即玩，改一行规则刷新就能测；方便发给朋友试玩</td></tr>
+    <tr><td>正式开发</td><td>Godot 4.7（GDScript）</td><td>MIT 许可，无授权费和分成；原生支持六边形 TileMap；可一键导出 Windows、macOS、Linux，适合上架 Steam</td></tr>
+    <tr><td>备选</td><td>Phaser 4（TypeScript）</td><td>如果团队更熟悉 Web 技术，或者想优先做网页版和小游戏平台</td></tr>
+  </table></div>
+  <p>目前 Godot 最新稳定版是 4.7.2（2026 年 8 月 18 日发布），4.8 还在测试阶段（11 月 9 日发布 beta 3）。正式开发建议从 4.7.2 起步，4.8 正式发布后再评估是否升级。Phaser 方面，Phaser 4.0.0 于 2026 年 4 月 10 日发布，是这个框架历史上最大的一次重写，之后陆续更新到 2026 年 7 月 9 日的 v4.2.1。</p>
+  <div class="note">
+    <p>为什么正式版不直接沿用网页原型：网页原型的价值是快速验证规则，它的代码结构会随着改规则不断变形。等规则稳定后在 Godot 里重写，成本不高，而且能获得编辑器、动画、粒子、音频和桌面导出等完整工具链。规则层（计分函数）可以几乎原样移植。</p>
+  </div>
+</section>
+
+<section id="refs">
+  <h2>开源参考</h2>
+  <div class="tw"><table>
+    <tr><th>项目</th><th>用途</th><th>许可与注意事项</th></tr>
+    <tr><td><a href="https://www.redblobgames.com/grids/hexagons/">Red Blob Games：六边形网格指南</a></td><td>轴向坐标、邻居、距离、像素换算、旋转的标准算法，本作底层全部基于它</td><td>算法教程，可自由参考</td></tr>
+    <tr><td><a href="https://github.com/chun92/card-framework">chun92/card-framework</a></td><td>手牌区、拖拽、牌堆管理</td><td>面向 Godot 4.x 的 2D 卡牌游戏插件，支持纸牌、集换式卡牌和构筑肉鸽，提供灵活的卡牌处理和拖放交互。在 Godot 资源库中以 MIT 许可发布。推荐首选</td></tr>
+    <tr><td><a href="https://github.com/insideout-andrew/deckbuilder-framework">insideout-andrew/deckbuilder-framework</a></td><td>抽牌、洗牌等基础牌堆逻辑，代码结构适合学习</td><td>实现了 Godot 中的卡牌与牌堆机制，包括抽牌、洗牌和多种标准卡牌交互。使用前确认许可证</td></tr>
+    <tr><td><a href="https://github.com/BennyTheHeal/godot-deckbuilder-kit">godot-deckbuilder-kit</a></td><td>参考奖励、遗物、战斗界面等肉鸽框架的组织方式</td><td>MIT 许可，作者说明制作中使用了 AI 工具，仓库是可直接打开的 Godot 4.5 以上项目。适合参考结构，不建议整体依赖</td></tr>
+    <tr><td><a href="https://github.com/db0/godot-card-game-framework">db0/godot-card-game-framework</a></td><td>规则脚本引擎的设计思路</td><td>采用 AGPL3 许可。AGPL 对闭源商业发行有很强的传染性要求，只看思路，不要把代码放进项目</td></tr>
+  </table></div>
+  <p>本作最核心的部分，也就是六边形生长和脉动计分，没有现成方案，需要自己写。好在这部分逻辑不复杂，原型里只有大约 100 行。</p>
+</section>
+
+<section id="arch">
+  <h2>架构</h2>
+  <p>最重要的原则是<strong>规则层和表现层彻底分离</strong>。规则层是纯数据加纯函数，不碰任何节点和画面，这样才能实现放置预览、自动化平衡测试和存档。</p>
+<pre><code>规则层（纯逻辑，可单元测试）
+├── CardDef          牌的静态定义：名称、芽点、效果、类别
+├── TreeModel        牌桌状态：格子 → 节点（类型、父、子、朝向、深度、放置顺序）
+├── Growth           可放置位置计算、放置、修剪、嫁接
+├── PulseResolver    计分：输入 TreeModel，输出每个节点的养分和总分
+└── RunState         季节、回合、牌库、手牌、弃牌、养分、器物、印记、地块
+
+表现层（Godot 场景）
+├── BoardView        六边形地块、枝干连线、脉动动画
+├── HandView         手牌区与拖拽
+├── HudView          季节、目标、预计脉动、按钮
+└── Screens          主菜单、年度地图、奖励、集市、结算</code></pre>
+  <p>计分函数移植到 GDScript 的样子：</p>
+<pre><code># pulse_resolver.gd — 纯函数，不依赖场景树
+class_name PulseResolver
+
+static func resolve(tree: TreeModel, seed_out: int) -> Dictionary:
+    var out := {}
+    for node in tree.nodes_in_order():            # 父节点一定先于子节点放置
+        if node.type == &"seed":
+            out[node.key] = seed_out
+        elif node.def.is_graft:
+            var v := 1
+            for p in node.parents: v *= out.get(p, 0)
+            out[node.key] = v
+        else:
+            out[node.key] = node.def.apply(out.get(node.parents[0], 0), node)
+
+    var tips := tree.tips()                       # 没有子节点的节点
+    var bonus := {}
+    for node in tree.nodes_in_order():
+        if node.def and node.def.aura > 0:
+            for nb in tree.neighbors(node.key):
+                if nb in tips: bonus[nb] = bonus.get(nb, 0) + node.def.aura
+
+    var total := 0
+    for t in tips: total += out[t] + bonus.get(t, 0)
+    return {"out": out, "total": total, "tips": tips}</code></pre>
+  <p>放置预览就是复制一份 TreeModel、假装放下这张牌、再调用一次 <code>resolve</code>。因为 61 格的树最多几十个节点，每次计算都在一毫秒以内。</p>
+</section>
+
+<section id="env">
+  <h2>环境搭建</h2>
+  <h3>阶段一：网页原型（现在就能用）</h3>
+  <ol class="steps">
+    <li>下载随附的 <code>shentree_prototype.html</code>，用 Chrome、Edge 或 Firefox 直接打开即可开始游戏。</li>
+    <li>修改规则：用任意文本编辑器（推荐 VS Code）打开文件，最上方的 <code>配置</code> 区包含全部可调参数：<code>TARGETS</code> 是四季目标，<code>START</code> 是起始牌组，<code>C</code> 是每张牌的定义。保存后刷新浏览器即可生效。</li>
+    <li>可选：在文件夹里运行 <code>npx serve</code> 开一个本地服务器，方便手机在同一局域网内访问试玩。</li>
+  </ol>
+
+  <h3>阶段二：Godot 正式项目</h3>
+  <ol class="steps">
+    <li>从 Godot 官网下载 4.7.2 标准版（不需要 .NET 版）。Godot 是单个可执行文件，解压即用，不需要安装。</li>
+    <li>安装 Git，新建仓库。在 <code>.gitignore</code> 中加入 <code>.godot/</code> 目录，它是本地缓存，不应提交。</li>
+    <li>打开 Godot，新建项目，渲染器选择 Compatibility 或 Mobile（2D 游戏不需要 Forward+）。</li>
+    <li>在项目设置中：显示 → 窗口，把视口设为 1920×1080，拉伸模式设为 <code>canvas_items</code>，宽高比设为 <code>expand</code>，保证不同分辨率下牌桌不变形。</li>
+    <li>在编辑器顶部 AssetLib 页面搜索 "Card Framework" 并安装，它会被放进 <code>addons/</code> 目录，然后在项目设置 → 插件中启用。</li>
+    <li>可选：安装单元测试插件 GUT，为 <code>PulseResolver</code> 和 <code>Growth</code> 写测试，每次改规则都自动验证计分正确。</li>
+    <li>按下面的目录结构建立文件夹。</li>
+  </ol>
+<pre><code>shentree/
+├── project.godot
+├── addons/                 # 第三方插件
+├── core/                   # 规则层，纯逻辑
+│   ├── card_def.gd
+│   ├── tree_model.gd
+│   ├── growth.gd
+│   ├── pulse_resolver.gd
+│   └── run_state.gd
+├── data/cards/             # 每张牌一个 .tres 资源文件
+├── scenes/
+│   ├── boot/Boot.tscn
+│   ├── menu/MainMenu.tscn
+│   ├── map/YearMap.tscn
+│   ├── season/Season.tscn  # 主玩法场景：BoardView + HandView + HudView
+│   ├── reward/Reward.tscn
+│   └── market/Market.tscn
+├── autoload/               # 全局单例
+│   ├── Game.gd             # 持有 RunState，负责场景切换
+│   ├── CardDB.gd           # 启动时载入 data/cards 下所有牌
+│   └── Events.gd           # 全局信号总线
+├── art/  audio/  fonts/
+└── tests/</code></pre>
+  <p>把 <code>Game</code>、<code>CardDB</code>、<code>Events</code> 三个脚本在项目设置 → 全局 → 自动加载中注册为单例。</p>
+</section>
+
+<section id="entry">
+  <h2>游戏入口</h2>
+  <h3>网页原型入口</h3>
+  <p>直接打开下面这个文件就是游戏入口，不需要任何安装：</p>
+  <a class="entry" href="shentree_prototype.html">打开可玩原型 shentree_prototype.html</a>
+  <p>如果两个文件放在同一个文件夹里，上面的链接可以直接跳转。</p>
+
+  <h3>Godot 正式版入口</h3>
+  <p>在项目设置 → 应用 → 运行中，把主场景设为 <code>res://scenes/boot/Boot.tscn</code>。启动后的场景流转：</p>
+<pre><code>Boot（载入牌库、设置、存档）
+ └→ MainMenu（新的一局 / 继续 / 设置）
+     └→ YearMap（显示当前是第几年、第几季，下一个节点）
+         ├→ Season（核心玩法：5 个回合，脉动计分）
+         │   ├→ 达标 → Reward（三选一）→ 回到 YearMap
+         │   └→ 未达标 → 结算画面 → MainMenu
+         └→ 冬末 → Season（天灾规则）→ Reward（器物）→ Market → 下一年</code></pre>
+  <p><code>Boot.gd</code> 只做三件事：</p>
+<pre><code># scenes/boot/Boot.gd
+extends Node
+
+func _ready() -> void:
+    CardDB.load_all("res://data/cards")
+    Game.load_settings()
+    var next := "res://scenes/menu/MainMenu.tscn"
+    if Game.has_save():
+        next = "res://scenes/menu/MainMenu.tscn"   # 菜单里显示"继续"
+    get_tree().change_scene_to_file.call_deferred(next)</code></pre>
+  <p>场景之间不直接互相引用，统一通过 <code>Game.goto(scene_name)</code> 切换，所有局内状态都保存在 <code>Game.run</code>（RunState）里。这样每一季结束时把 RunState 序列化写入 <code>user://save.json</code>，就实现了自动存档。</p>
+</section>
+
+<section id="milestones">
+  <h2>实现步骤</h2>
+  <div class="tw"><table>
+    <tr><th>阶段</th><th>目标</th><th>产出</th><th>验收标准</th><th>预计</th></tr>
+    <tr><td>M0 规则调优</td><td>在网页原型上把第一年调到好玩</td><td>调整后的原型；10 位以上试玩者的反馈</td><td>新玩家在第一季内自己发现分叉和嫁接；多数人主动想打第二局</td><td>1 到 2 周</td></tr>
+    <tr><td>M1 规则层移植</td><td>把 CardDef、TreeModel、Growth、PulseResolver 写进 Godot</td><td><code>core/</code> 目录和单元测试</td><td>同样的树，在 Godot 里算出的分数与网页原型完全一致</td><td>1 周</td></tr>
+    <tr><td>M2 灰盒可玩</td><td>Season 场景跑通一整年</td><td>六边形牌桌、手牌拖拽、预览、脉动、奖励</td><td>用色块代替美术，完整打完四季</td><td>2 到 3 周</td></tr>
+    <tr><td>M3 系统扩充</td><td>加入器物、年轮、土地、天灾、集市、存档</td><td>完整的三年结构</td><td>从主菜单到通关整个流程无阻断</td><td>3 到 4 周</td></tr>
+    <tr><td>M4 内容扩充</td><td>牌扩到约 90 张，器物约 30 个</td><td>数据表和平衡测试脚本</td><td>至少 6 种明显不同的成型树形都能通关</td><td>4 到 6 周</td></tr>
+    <tr><td>M5 美术与手感</td><td>旧印刷品风格、脉动动画、音效</td><td>可展示的视觉切片</td><td>一段 15 秒的脉动录屏能让没玩过的人看懂</td><td>4 到 6 周</td></tr>
+    <tr><td>M6 试玩版</td><td>Steam 商店页与试玩版</td><td>只含第一年的 Demo</td><td>参加 Steam 新品节，收集愿望单数据</td><td>2 周</td></tr>
+  </table></div>
+  <p>最重要的是 M0：在投入 Godot 开发之前，先确认网页原型本身已经好玩。原型的自动测试表明，当前数值下贪心策略已经能偶尔通关，说明数值框架可用；接下来需要真人试玩来回答更关键的问题：玩家会不会主动规划嫁接、会不会为了腾空间而修剪、以及树长满之后是否还有足够的决策。</p>
+</section>
+</main>
+</div>
+</body>
+</html>

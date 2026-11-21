@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="CardDef" format=3]
+
+[ext_resource type="Script" path="res://core/card_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"curl"
+display_name = "回旋枝"
+category = 1
+ports = PackedInt32Array(-2)
+effect = 1
+value = 2.0
+color_key = &"blue"
+price = 4
+desc = "+2；芽点朝向右后方，让树绕回来"

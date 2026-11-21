@@ -1,0 +1,9 @@
+[gd_resource type="Resource" script_class="RelicDef" format=3]
+
+[ext_resource type="Script" path="res://core/relic_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"dew"
+display_name = "露水瓶"
+desc = "每季第一次脉动 ×2"

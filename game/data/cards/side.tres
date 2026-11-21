@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="CardDef" format=3]
+
+[ext_resource type="Script" path="res://core/card_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"side"
+display_name = "侧枝"
+category = 1
+ports = PackedInt32Array(0, 1)
+effect = 0
+value = 0.0
+color_key = &"blue"
+price = 5
+desc = "不加值；向前和左前方分枝"

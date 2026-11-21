@@ -1,0 +1,9 @@
+[gd_resource type="Resource" script_class="CalamityDef" format=3]
+
+[ext_resource type="Script" path="res://core/calamity_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"drought"
+display_name = "干旱"
+desc = "树心输出减半"

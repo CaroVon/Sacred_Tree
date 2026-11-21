@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="CardDef" format=3]
+
+[ext_resource type="Script" path="res://core/card_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"leaf"
+display_name = "落叶"
+category = 6
+ports = PackedInt32Array()
+effect = 1
+value = 1.0
+color_key = &"grey"
+price = 4
+desc = "+1，末端；被剪掉时，下次脉动所有末梢 +3"
+prune_tip_bonus = 3

@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="CardDef" format=3]
+
+[ext_resource type="Script" path="res://core/card_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"palm"
+display_name = "掌叉"
+category = 1
+ports = PackedInt32Array(-2, 0, 2)
+effect = 4
+value = 1.0
+color_key = &"blue"
+price = 6
+desc = "−1；向前和左右后方三个方向分枝"

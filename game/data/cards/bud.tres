@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="CardDef" format=3]
+
+[ext_resource type="Script" path="res://core/card_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"bud"
+display_name = "花苞"
+category = 5
+ports = PackedInt32Array()
+effect = 1
+value = 0.0
+color_key = &"pink"
+price = 5
+desc = "末端；前两次脉动 +0，之后 +12"
+ripen_age = 2
+ripe_value = 12.0

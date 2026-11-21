@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="CardDef" format=3]
+
+[ext_resource type="Script" path="res://core/card_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"fork"
+display_name = "分叉"
+category = 1
+ports = PackedInt32Array(-1, 1)
+effect = 0
+value = 0.0
+aura = 0
+prune_value = 1
+color_key = &"blue"
+in_reward_pool = true
+desc = "不加值，向左右两侧分枝"
+price = 5

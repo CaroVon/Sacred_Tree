@@ -1,0 +1,7 @@
+tools/godot/
+game/.godot/
+*.import.tmp
+balance_out/
+
+__pycache__/
+*.pyc

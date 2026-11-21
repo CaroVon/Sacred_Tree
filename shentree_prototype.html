@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>神树 · 可玩原型</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=ZCOOL+XiaoWei&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#E9E8E3; --sheet:#F6F5F1; --ink:#1B2430; --soft:#5A6372; --rule:#C9C7BF; --cell:#DFDDD5;
+  --green:#00A95C; --blue:#0078BF; --red:#FF5A2C; --gold:#C99700; --pink:#E8459A; --grey:#8A8F98;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --paper:#15191F; --sheet:#1E232B; --ink:#E6E4DE; --soft:#A9AFB8; --rule:#353C47; --cell:#252B34;
+    --green:#2BC27A; --blue:#3A9BE0; --red:#FF7A52; --gold:#E8B828; --pink:#F06AAE; --grey:#7C828C;
+    color-scheme: dark;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:"Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif;font-size:15px;line-height:1.6}
+h1,h2{font-family:"ZCOOL XiaoWei",serif;font-weight:400;margin:0}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+header{display:flex;align-items:baseline;gap:18px;flex-wrap:wrap;padding:18px 24px 6px;max-width:1280px;margin:0 auto}
+header h1{font-size:34px}
+header p{margin:0;color:var(--soft)}
+.wrap{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:20px;max-width:1280px;margin:0 auto;padding:8px 24px 24px}
+.boardbox{background:var(--sheet);border:1.5px solid var(--ink);box-shadow:5px 5px 0 var(--green);padding:8px;min-width:0}
+svg#board{width:100%;height:auto;display:block;max-height:68vh}
+#hint{min-height:26px;padding:4px 8px;color:var(--soft);font-size:14px}
+aside{display:flex;flex-direction:column;gap:14px}
+.panel{background:var(--sheet);border:1px solid var(--rule);padding:12px 14px}
+.stat{display:flex;justify-content:space-between;font-variant-numeric:tabular-nums}
+.bar{height:8px;background:var(--cell);margin:6px 0 10px}
+.bar i{display:block;height:100%;background:var(--green);width:0;transition:width .4s}
+@media (prefers-reduced-motion: reduce){.bar i{transition:none}}
+.big{font-size:26px;font-family:"ZCOOL XiaoWei",serif}
+.btn{display:block;width:100%;padding:9px 12px;margin:0 0 8px;background:var(--sheet);border:1.5px solid var(--ink);text-align:left}
+.btn.primary{background:var(--ink);color:var(--paper)}
+.btn[aria-pressed="true"]{background:var(--pink);border-color:var(--pink);color:#fff}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.rules{margin:0;padding-left:18px;font-size:13.5px;color:var(--soft)}
+.rules li{margin-bottom:4px}
+#log{margin:0;padding:0;list-style:none;font-size:13px;color:var(--soft);max-height:150px;overflow:auto}
+#log li{border-bottom:1px dashed var(--rule);padding:3px 0}
+.handrow{max-width:1280px;margin:0 auto;padding:0 24px 32px}
+.handrow h2{font-size:20px;margin:0 0 10px}
+#hand{display:flex;gap:16px;flex-wrap:wrap}
+.card{width:168px;min-height:150px;background:var(--sheet);border:1.5px solid var(--ink);box-shadow:4px 4px 0 var(--c);padding:10px 12px;text-align:left;display:flex;flex-direction:column}
+.card .nm{font-family:"ZCOOL XiaoWei",serif;font-size:24px;line-height:1.1}
+.card .pt{font-size:12px;color:var(--soft);margin:4px 0 6px}
+.card .ds{font-size:13.5px;line-height:1.5;flex:1}
+.card[aria-pressed="true"]{transform:translate(-3px,-3px);box-shadow:7px 7px 0 var(--c)}
+.card:disabled{opacity:.45;cursor:not-allowed}
+.card .no{font-size:12px;color:var(--red)}
+#modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:20px;z-index:10}
+#modal[hidden]{display:none}
+.mbox{background:var(--sheet);border:1.5px solid var(--ink);box-shadow:6px 6px 0 var(--pink);padding:22px;max-width:620px;width:100%}
+.mbox h2{font-size:28px;margin-bottom:8px}
+.mbtns{display:flex;gap:14px;flex-wrap:wrap;margin-top:14px}
+/* svg */
+.cell{fill:var(--cell);stroke:var(--paper);stroke-width:2}
+.target{fill:var(--sheet);stroke:var(--pink);stroke-width:2.5;stroke-dasharray:5 4;cursor:pointer}
+.target:hover,.target:focus{fill:var(--pink);fill-opacity:.18}
+.node{fill:var(--sheet);stroke:var(--ink);stroke-width:1.6}
+.node.prunable{cursor:pointer}
+.node.prunable:hover{fill:var(--red);fill-opacity:.25}
+.ring{fill:none;stroke-width:3}
+.tipmark{fill:none;stroke:var(--pink);stroke-width:2;stroke-dasharray:3 3}
+.edge{stroke:var(--ink);stroke-width:4;stroke-linecap:round;fill:none}
+.edge2{stroke:var(--green);stroke-width:4;stroke-linecap:round;fill:none;opacity:.55}
+.lbl{font-family:"ZCOOL XiaoWei",serif;font-size:15px;fill:var(--ink);text-anchor:middle;pointer-events:none}
+.val{font-size:11px;fill:var(--soft);text-anchor:middle;pointer-events:none;font-variant-numeric:tabular-nums}
+.flash{font-size:15px;font-weight:700;fill:var(--pink);text-anchor:middle;pointer-events:none}
+.seed{fill:var(--ink)}
+.seedlbl{font-family:"ZCOOL XiaoWei",serif;font-size:17px;fill:var(--paper);text-anchor:middle;pointer-events:none}
+@media (max-width:900px){.wrap{grid-template-columns:1fr}.card{width:calc(50% - 8px)}}
+</style>
+</head>
+<body>
+<header>
+  <h1>神树</h1>
+  <p>可玩原型：在六边形土地上培育神树，让养分沿着枝干流向每一个末梢。</p>
+</header>
+
+<div class="wrap">
+  <div>
+    <div class="boardbox">
+      <svg id="board" role="img" aria-label="神树牌桌"></svg>
+      <div id="hint" aria-live="polite"></div>
+    </div>
+  </div>
+  <aside>
+    <div class="panel">
+      <div class="stat"><span id="season"></span><span id="turn"></span></div>
+      <div class="stat" style="margin-top:6px"><span>本季累计</span><span id="score"></span></div>
+      <div class="bar"><i id="barfill"></i></div>
+      <div class="stat"><span>下次脉动预计</span><span class="big" id="pulse"></span></div>
+      <div class="stat"><span>养分储备</span><span id="sap"></span></div>
+      <div class="stat"><span>牌库 / 弃牌</span><span id="piles"></span></div>
+      <div class="stat"><span>本回合可放 / 可剪</span><span id="acts"></span></div>
+    </div>
+    <div>
+      <button class="btn primary" id="bEnd">结束回合并脉动</button>
+      <button class="btn" id="bPrune" aria-pressed="false">修剪</button>
+      <button class="btn" id="bRedraw">重抽手牌（花 2 养分）</button>
+    </div>
+    <div class="panel">
+      <ol class="rules">
+        <li>中心是神树之种，从三个芽点向外长。它每季成熟一次：每次脉动输出的养分，春季 1、夏季 2、秋季 4、冬季 8。</li>
+        <li>选一张手牌，点亮的虚线格就是可以接上的位置。每回合最多放 2 张。</li>
+        <li>结束回合时养分从种子出发，沿枝干流动，遇到分叉就复制。所有末梢的养分相加就是得分。</li>
+        <li>花会给相邻的其他末梢加养分；藤能把挨着的两个以上末梢嫁接起来，养分相乘。</li>
+        <li>修剪会剪掉一张牌和它后面的所有枝，每张得 1 养分。每回合限 1 次。</li>
+      </ol>
+    </div>
+    <div class="panel">
+      <ul id="log"></ul>
+    </div>
+  </aside>
+</div>
+
+<section class="handrow">
+  <h2>手牌</h2>
+  <div id="hand"></div>
+</section>
+
+<div id="modal" hidden role="dialog" aria-modal="true" aria-labelledby="mtitle">
+  <div class="mbox">
+    <h2 id="mtitle"></h2>
+    <div id="mtext"></div>
+    <div class="mbtns" id="mbtns"></div>
+  </div>
+</div>
+
+<script>
+// ---------- 配置 ----------
+const DIRS = [[1,0],[1,-1],[0,-1],[-1,0],[-1,1],[0,1]]; // 轴向坐标，相邻方向依次旋转 60°
+const R = 4, SIZE = 34;
+const TARGETS = [50, 180, 500, 1200];
+const SEASONS = ['春','夏','秋','冬'];
+const TURNS = 5, HAND = 4, PLAYS = 2;
+
+const C = {
+  stem:   {n:'茎',   ports:[0],       fx:v=>v+3,              d:'+3',                         col:'--green'},
+  node:   {n:'节',   ports:[0],       fx:(v,x)=>v+x.depth,    d:'+所在深度（离种子越远加得越多）', col:'--green'},
+  fork:   {n:'分叉', ports:[-1,1],    fx:v=>v,                d:'不加值，向左右两侧分枝',        col:'--blue'},
+  tri:    {n:'三叉', ports:[-1,0,1],  fx:v=>Math.max(0,v-2),  d:'−2，向三个方向分枝',            col:'--blue'},
+  fruit:  {n:'果',   ports:[],        fx:v=>v*2,              d:'×2，末端',                     col:'--red'},
+  gold:   {n:'金果', ports:[],        fx:v=>v*3,              d:'×3，末端',                     col:'--red'},
+  flower: {n:'花',   ports:[],        fx:v=>v+1, aura:3,      d:'+1，末端；相邻的其他末梢各 +3',  col:'--pink'},
+  vine:   {n:'藤',   ports:[],        graft:true,             d:'放在挨着 2 个以上末梢的空格，把它们嫁接起来，养分相乘', col:'--gold'},
+  dead:   {n:'枯枝', ports:[0],       fx:v=>v+1, prune:3,     d:'+1；被剪掉时得 3 养分',          col:'--grey'},
+};
+const START = {stem:4, node:2, fork:3, tri:1, fruit:3, flower:2, vine:1, dead:2};
+const REWARD_POOL = ['stem','node','fork','tri','fruit','gold','gold','flower','vine','vine','dead'];
+
+// ---------- 工具 ----------
+const k = (q,r) => q+','+r;
+const inBoard = (q,r) => Math.max(Math.abs(q),Math.abs(r),Math.abs(-q-r)) <= R;
+const shuffle = a => { for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];} return a; };
+const px = (q,r) => [SIZE*Math.sqrt(3)*(q+r/2), SIZE*1.5*r];
+function hexPts(cx,cy,s){ const p=[]; for(let i=0;i<6;i++){const a=Math.PI/180*(60*i-30); p.push((cx+s*Math.cos(a)).toFixed(1)+','+(cy+s*Math.sin(a)).toFixed(1));} return p.join(' '); }
+const allCells = (()=>{ const out=[]; for(let q=-R;q<=R;q++) for(let r=-R;r<=R;r++) if(inBoard(q,r)) out.push([q,r]); return out; })();
+
+// ---------- 状态 ----------
+let S;
+function newRun(){
+  S = {season:1, turn:1, score:0, sap:0, nodes:new Map(), order:0, deck:[], discard:[], hand:[],
+       plays:PLAYS, prunes:1, sel:null, prune:false, flash:null, log:[]};
+  S.nodes.set('0,0', {key:'0,0', q:0, r:0, type:'seed', parents:[], children:[], facing:null, depth:0, order:S.order++});
+  for(const [t,c] of Object.entries(START)) for(let i=0;i<c;i++) S.deck.push(t);
+  shuffle(S.deck); draw();
+  log('神树之种落地。第一季开始。');
+  closeModal(); render();
+}
+
+function portsOf(n){
+  if(n.type==='seed') return [1,3,5];
+  return C[n.type].ports.map(p => (n.facing+p+6)%6);
+}
+
+const seedOut = () => (S ? 2**(S.season-1) : 1); // 神树之心每季成熟一次，输出翻倍
+// 纯函数：根据牌桌计算本次脉动
+function compute(nodes){
+  const list = [...nodes.values()].sort((a,b)=>a.order-b.order);
+  const out = {};
+  for(const n of list){
+    if(n.type==='seed'){ out[n.key]=seedOut(); continue; }
+    const def = C[n.type];
+    if(def.graft) out[n.key] = n.parents.reduce((p,kk)=>p*(out[kk]??0), 1);
+    else out[n.key] = def.fx(out[n.parents[0]]??0, n);
+  }
+  const tips = list.filter(n=>n.children.length===0);
+  const tipSet = new Set(tips.map(t=>t.key));
+  const bonus = {};
+  for(const n of list){
+    if(n.type==='seed' || !C[n.type].aura) continue;
+    for(const [dq,dr] of DIRS){
+      const kk = k(n.q+dq, n.r+dr);
+      if(tipSet.has(kk)) bonus[kk] = (bonus[kk]||0) + C[n.type].aura;
+    }
+  }
+  const contrib = {}; let total = 0;
+  for(const t of tips){ contrib[t.key] = out[t.key] + (bonus[t.key]||0); total += contrib[t.key]; }
+  return {out, contrib, total, tips:tipSet};
+}
+
+// 某张牌可以放的位置：key -> {parents, facing}
+function targetsFor(type){
+  const res = new Map(); const nodes = S.nodes; const {out, tips} = compute(nodes);
+  if(C[type].graft){
+    for(const [q,r] of allCells){
+      const kk = k(q,r); if(nodes.has(kk)) continue;
+      const ps = DIRS.map(([dq,dr])=>k(q+dq,r+dr)).filter(x=>tips.has(x));
+      if(ps.length>=2) res.set(kk, {parents:ps, facing:null});
+    }
+  } else {
+    for(const n of nodes.values()){
+      for(const d of portsOf(n)){
+        const q=n.q+DIRS[d][0], r=n.r+DIRS[d][1], kk=k(q,r);
+        if(!inBoard(q,r) || nodes.has(kk)) continue;
+        const cur = res.get(kk);
+        if(!cur || out[n.key] > cur.score) res.set(kk, {parents:[n.key], facing:d, score:out[n.key]});
+      }
+    }
+  }
+  return res;
+}
+
+function makeNode(nodes, type, kk, info, order){
+  const [q,r] = kk.split(',').map(Number);
+  const depth = Math.max(...info.parents.map(p=>nodes.get(p).depth)) + 1;
+  const n = {key:kk, q, r, type, parents:[...info.parents], children:[], facing:info.facing, depth, order};
+  nodes.set(kk, n);
+  for(const p of info.parents) nodes.get(p).children.push(kk);
+  return n;
+}
+function cloneNodes(){
+  const m = new Map();
+  for(const [kk,n] of S.nodes) m.set(kk, {...n, parents:[...n.parents], children:[...n.children]});
+  return m;
+}
+function subtree(nodes, kk){
+  const seen = new Set(), st = [kk];
+  while(st.length){ const x=st.pop(); if(seen.has(x)) continue; seen.add(x); for(const c of nodes.get(x).children) st.push(c); }
+  return seen;
+}
+function removeSet(nodes, set){
+  for(const x of set) nodes.delete(x);
+  for(const n of nodes.values()) n.children = n.children.filter(c=>!set.has(c));
+}
+
+// ---------- 行动 ----------
+function draw(){
+  while(S.hand.length < HAND){
+    if(!S.deck.length){ if(!S.discard.length) break; S.deck = shuffle(S.discard); S.discard = []; }
+    S.hand.push(S.deck.pop());
+  }
+}
+function place(kk){
+  const type = S.hand[S.sel]; const info = targetsFor(type).get(kk); if(!info) return;
+  const before = compute(S.nodes).total;
+  makeNode(S.nodes, type, kk, info, S.order++);
+  S.hand.splice(S.sel,1); S.sel = null; S.plays--; S.flash = null;
+  const after = compute(S.nodes).total;
+  log(`放下${C[type].n}：脉动预计 ${before} → ${after}`);
+  render();
+}
+function prune(kk){
+  if(kk==='0,0' || S.prunes<=0) return;
+  const set = subtree(S.nodes, kk); let gain = 0;
+  for(const x of set){ const t = S.nodes.get(x).type; gain += C[t].prune || 1; S.discard.push(t); }
+  removeSet(S.nodes, set);
+  S.sap += gain; S.prunes--; S.prune = false; S.flash = null;
+  log(`修剪 ${set.size} 张，得 ${gain} 养分`);
+  render();
+}
+function endTurn(){
+  const res = compute(S.nodes);
+  S.score += res.total; S.flash = res.contrib;
+  log(`${SEASONS[S.season-1]}季第 ${S.turn} 回合脉动：${res.tips.size} 个末梢，得 ${res.total}`);
+  S.turn++; S.sel = null; S.prune = false;
+  if(S.turn > TURNS){ render(); endSeason(); return; }
+  S.plays = PLAYS; S.prunes = 1; draw(); render();
+}
+function endSeason(){
+  const target = TARGETS[S.season-1];
+  if(S.score < target){
+    showModal('这一季没有达标', `<p>本季累计 ${S.score}，目标 ${target}。神树停止了生长。</p>`, [{label:'重新开始', fn:newRun, primary:true}]);
+    return;
+  }
+  if(S.season === TARGETS.length){
+    showModal('神树成年', `<p>四季全部达标，最后一季累计 ${S.score}。牌桌上共有 ${S.nodes.size} 张牌。</p>`, [{label:'再培育一棵', fn:newRun, primary:true}]);
+    return;
+  }
+  const picks = shuffle([...new Set(shuffle([...REWARD_POOL]))]).slice(0,3);
+  const btns = picks.map(t => ({label:`<b style="font-family:'ZCOOL XiaoWei',serif;font-size:20px">${C[t].n}</b><br><span style="font-size:13px">${C[t].d}</span>`, fn:()=>{S.discard.push(t); log(`获得${C[t].n}`); nextSeason();}, card:t}));
+  btns.push({label:'跳过，得 3 养分', fn:()=>{S.sap+=3; nextSeason();}});
+  showModal(`${SEASONS[S.season-1]}季达标`, `<p>本季累计 ${S.score} / ${target}。选一张牌加入牌组，神树会带着现在的形状进入下一季。</p>`, btns);
+}
+function nextSeason(){
+  S.season++; S.turn = 1; S.score = 0; S.plays = PLAYS; S.prunes = 1; S.flash = null;
+  S.discard.push(...S.hand); S.hand = [];
+  S.deck = shuffle([...S.deck, ...S.discard]); S.discard = [];
+  draw(); closeModal();
+  log(`${SEASONS[S.season-1]}季开始，目标 ${TARGETS[S.season-1]}`);
+  render();
+}
+function redraw(){
+  if(S.sap < 2) return;
+  S.sap -= 2; S.discard.push(...S.hand); S.hand = []; S.sel = null; draw();
+  log('花 2 养分重抽手牌'); render();
+}
+function log(t){ S.log.unshift(t); S.log = S.log.slice(0,12); }
+
+// ---------- 渲染 ----------
+const svg = document.getElementById('board');
+const hint = document.getElementById('hint');
+function render(){
+  const tg = (S.sel!==null && S.plays>0) ? targetsFor(S.hand[S.sel]) : new Map();
+  const res = compute(S.nodes);
+  const W = SIZE*Math.sqrt(3)*(R+0.6), H = SIZE*(1.5*R+1.2);
+  svg.setAttribute('viewBox', `${-W} ${-H} ${2*W} ${2*H}`);
+  let h = '';
+  for(const [q,r] of allCells){
+    const kk = k(q,r); if(S.nodes.has(kk)) continue;
+    const [x,y] = px(q,r);
+    if(tg.has(kk)) h += `<polygon class="target" data-k="${kk}" tabindex="0" role="button" aria-label="放在这里" points="${hexPts(x,y,SIZE-1)}"/>`;
+    else h += `<polygon class="cell" points="${hexPts(x,y,SIZE-1)}"/>`;
+  }
+  for(const n of S.nodes.values()){
+    const [x1,y1] = px(n.q,n.r);
+    for(const c of n.children){
+      const m = S.nodes.get(c); const [x2,y2] = px(m.q,m.r);
+      h += `<line class="edge2" x1="${x1+2}" y1="${y1+2}" x2="${x2+2}" y2="${y2+2}"/><line class="edge" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>`;
+    }
+  }
+  for(const n of S.nodes.values()){
+    const [x,y] = px(n.q,n.r);
+    if(n.type==='seed'){
+      h += `<polygon class="seed" points="${hexPts(x,y,SIZE-6)}"/><text class="seedlbl" x="${x}" y="${y+2}">种</text><text class="seedlbl" style="font-size:11px" x="${x}" y="${y+16}">${res.out[n.key]}</text>`;
+    } else {
+      const pr = S.prune && S.prunes>0;
+      h += `<polygon class="node${pr?' prunable':''}" data-n="${n.key}" ${pr?'tabindex="0" role="button" aria-label="剪掉'+C[n.type].n+'"':''} points="${hexPts(x,y,SIZE-6)}"/>`;
+      h += `<polygon class="ring" style="stroke:var(${C[n.type].col})" points="${hexPts(x,y,SIZE-11)}"/>`;
+      h += `<text class="lbl" x="${x}" y="${y+1}">${C[n.type].n}</text><text class="val" x="${x}" y="${y+15}">${res.out[n.key]}</text>`;
+    }
+    if(res.tips.has(n.key)) h += `<polygon class="tipmark" points="${hexPts(x,y,SIZE-2)}"/>`;
+    if(S.flash && S.flash[n.key]!==undefined) h += `<text class="flash" x="${x}" y="${y-SIZE+4}">+${S.flash[n.key]}</text>`;
+  }
+  svg.innerHTML = h;
+
+  document.getElementById('season').textContent = `${SEASONS[S.season-1]}季（${S.season}/4）`;
+  document.getElementById('turn').textContent = `回合 ${Math.min(S.turn,TURNS)}/${TURNS}`;
+  const target = TARGETS[S.season-1];
+  document.getElementById('score').textContent = `${S.score} / ${target}`;
+  document.getElementById('barfill').style.width = Math.min(100, S.score/target*100)+'%';
+  document.getElementById('pulse').textContent = res.total;
+  document.getElementById('sap').textContent = S.sap;
+  document.getElementById('piles').textContent = `${S.deck.length} / ${S.discard.length}`;
+  document.getElementById('acts').textContent = `${S.plays} / ${S.prunes}`;
+  const bP = document.getElementById('bPrune');
+  bP.setAttribute('aria-pressed', S.prune ? 'true':'false'); bP.disabled = S.prunes<=0 || S.nodes.size<=1;
+  bP.textContent = S.prune ? '取消修剪' : '修剪';
+  document.getElementById('bRedraw').disabled = S.sap < 2 || !S.hand.length;
+
+  const hand = document.getElementById('hand');
+  hand.innerHTML = S.hand.map((t,i)=>{
+    const def = C[t]; const can = S.plays>0 && targetsFor(t).size>0;
+    const pt = def.graft ? '嫁接' : def.ports.length ? `芽点 ${def.ports.length}` : '末端';
+    return `<button class="card" data-i="${i}" style="--c:var(${def.col})" aria-pressed="${S.sel===i}" ${can?'':'disabled'}>
+      <span class="nm">${def.n}</span><span class="pt">${pt}</span><span class="ds">${def.d}</span>
+      ${can?'':`<span class="no">${S.plays>0?'没有可放的位置':'本回合已放满'}</span>`}</button>`;
+  }).join('') || '<p style="color:var(--soft)">手牌为空。结束回合会补抽。</p>';
+
+  if(S.prune) hint.textContent = '修剪模式：点一张牌，剪掉它和它后面的所有枝。';
+  else if(S.sel!==null) hint.textContent = `选中${C[S.hand[S.sel]].n}：点亮的虚线格可以放。把鼠标移到格子上查看预计变化。`;
+  else hint.textContent = '选一张手牌开始生长，或者直接结束回合让神树脉动。';
+
+  document.getElementById('log').innerHTML = S.log.map(t=>`<li>${t}</li>`).join('');
+}
+
+// ---------- 交互 ----------
+svg.addEventListener('click', e=>{
+  const t = e.target;
+  if(t.dataset.k && S.sel!==null) place(t.dataset.k);
+  else if(t.dataset.n && S.prune) prune(t.dataset.n);
+});
+svg.addEventListener('keydown', e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); e.target.dispatchEvent(new MouseEvent('click',{bubbles:true})); } });
+svg.addEventListener('mouseover', e=>{
+  const t = e.target; const now = compute(S.nodes).total;
+  if(t.dataset.k && S.sel!==null){
+    const type = S.hand[S.sel]; const info = targetsFor(type).get(t.dataset.k); if(!info) return;
+    const m = cloneNodes(); makeNode(m, type, t.dataset.k, info, S.order);
+    hint.textContent = `放在这里：下次脉动 ${now} → ${compute(m).total}`;
+  } else if(t.dataset.n && S.prune){
+    const set = subtree(S.nodes, t.dataset.n); const m = cloneNodes(); removeSet(m, set);
+    let gain = 0; for(const x of set) gain += C[S.nodes.get(x).type].prune || 1;
+    hint.textContent = `剪掉 ${set.size} 张，得 ${gain} 养分；下次脉动 ${now} → ${compute(m).total}`;
+  }
+});
+document.getElementById('hand').addEventListener('click', e=>{
+  const b = e.target.closest('.card'); if(!b || b.disabled) return;
+  const i = +b.dataset.i; S.sel = (S.sel===i) ? null : i; S.prune = false; S.flash = null; render();
+});
+document.getElementById('bEnd').onclick = endTurn;
+document.getElementById('bPrune').onclick = ()=>{ S.prune = !S.prune; S.sel = null; render(); };
+document.getElementById('bRedraw').onclick = redraw;
+
+// ---------- 弹窗 ----------
+function showModal(title, text, btns){
+  document.getElementById('mtitle').textContent = title;
+  document.getElementById('mtext').innerHTML = text;
+  const box = document.getElementById('mbtns'); box.innerHTML = '';
+  for(const b of btns){
+    const el = document.createElement('button');
+    el.className = b.card ? 'card' : 'btn' + (b.primary ? ' primary' : '');
+    if(b.card) el.style.setProperty('--c', `var(${C[b.card].col})`);
+    else el.style.width = 'auto';
+    el.innerHTML = b.label; el.onclick = b.fn; box.appendChild(el);
+  }
+  document.getElementById('modal').hidden = false;
+  box.querySelector('button')?.focus();
+}
+function closeModal(){ document.getElementById('modal').hidden = true; }
+
+newRun();
+</script>
+</body>
+</html>
