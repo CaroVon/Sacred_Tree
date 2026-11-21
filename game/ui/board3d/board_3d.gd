@@ -383,7 +383,9 @@ static var _placeholder_cache: Dictionary = {}
 static func standee_texture(id: StringName) -> Texture2D:
 	id = StringName(String(id).trim_suffix("+"))
 	var t := CardArt.texture(StringName("standee_" + String(id)))
-	if t == null:
+	# 新流派的牌没有立牌时用流派色徽记（整张图版立起来不像立牌）；木系老牌仍可退回图版
+	var def := Cards.get_def(id)
+	if t == null and def != null and def.family.is_empty():
 		t = CardArt.texture(id)
 	return t if t else placeholder_standee(id)
 
