@@ -15,5 +15,5 @@ price = 3
 rarity = 0
 family = Array[StringName]([&"forge"])
 keywords = Array[StringName]([&"fuel"])
-desc = "+1，向左右分枝；燃烧时火候额外 +2"
-heat_on_burn = 2
+desc = "+1，向左右分枝；燃烧时火候额外 +3"
+heat_on_burn = 3

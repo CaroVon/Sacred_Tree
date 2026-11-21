@@ -497,7 +497,7 @@ func _draw_land(c: Vector2i, p: Vector2, s: float, k: float) -> void:
 			art = &"land_spring"
 			base = Palette.WATER.lerp(Palette.CELL, 0.55)
 		Land.Type.ORE, Land.Type.LAVA, Land.Type.STARWELL, Land.Type.GOLDSAND:
-			art = &"land_plain"
+			art = Land.ART[lt] if CardArt.has(Land.ART[lt]) else &"land_plain"
 			var lc: Color = {Land.Type.ORE: Palette.STEEL, Land.Type.LAVA: Palette.EMBER,
 				Land.Type.STARWELL: Palette.ASTRAL, Land.Type.GOLDSAND: Palette.COIN}[lt]
 			base = lc.lerp(Palette.CELL, 0.5)

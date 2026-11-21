@@ -13,7 +13,7 @@ func _initialize() -> void:
 	var free := a.size() > 2 and a[2] == "free"
 	var seed0 := int(a[3]) if a.size() > 3 else 1
 	var focus: StringName = StringName(a[4]) if a.size() > 4 and a[4] != "any" else &""
-	var out := a[5] if a.size() > 5 else ""
+	var out := a[5] if a.size() > 5 and a[5] != "raw" else ""
 	var t0 := Time.get_ticks_msec()
 	var bot := Bot.make(policy, focus)
 	var results := []
@@ -47,6 +47,13 @@ func _initialize() -> void:
 	if not free:
 		var won := results.filter(func(r): return r.won).size()
 		lines.append("# 通关 %d / %d（%.1f%%）" % [won, runs, 100.0 * won / runs])
+	# raw：逐局逐季输出 RAW,seed,year,season,score,passed（校准脚本用）
+	if a.has("raw"):
+		for r in results.size():
+			for sg in results[r].stages:
+				lines.append("RAW,%d,%d,%d,%d,%d" % [seed0 + r, sg.year, sg.season, sg.score, 1 if sg.passed else 0])
+		for r in results.size():
+			lines.append("END,%d,%d,%d,%d" % [seed0 + r, 1 if results[r].won else 0, results[r].year, results[r].season])
 	for l in lines:
 		print(l)
 	if out != "":

@@ -15,5 +15,5 @@ price = 3
 rarity = 0
 family = Array[StringName]([&"coin"])
 keywords = Array[StringName]([&"tip", &"sap"])
-desc = "+3，末端；每次脉动得 1 养分"
-pulse_sap = 1
+desc = "+3，末端；每次脉动得 2 养分"
+pulse_sap = 2

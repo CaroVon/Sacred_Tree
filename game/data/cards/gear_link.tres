@@ -15,5 +15,5 @@ price = 6
 rarity = 1
 family = Array[StringName]([&"gear"])
 keywords = Array[StringName]([&"conduct", &"link"])
-desc = "×(1 + 0.5×相邻齿轮牌数)"
-adj_family_mul = 0.5
+desc = "×(1 + 1.5×相邻齿轮牌数)"
+adj_family_mul = 1.5

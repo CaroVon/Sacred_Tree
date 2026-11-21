@@ -655,6 +655,13 @@ func _remove_to_discard(set: Dictionary) -> void:
 func _burn(set: Dictionary) -> void:
 	if set.is_empty():
 		return
+	# 封印牌离开牌桌：存量立即按 ×1 释放，不会白白丢掉
+	var spill := 0
+	for x in set:
+		spill += tree.at(x).stored
+	if spill > 0:
+		score += spill
+		add_log("封存随牌离开牌桌，立即释放 %d" % spill)
 	var tier := res_tier(&"forge")
 	for x in set:
 		var d := tree.at(x).def()

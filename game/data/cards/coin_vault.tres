@@ -15,5 +15,5 @@ price = 6
 rarity = 2
 family = Array[StringName]([&"coin"])
 keywords = Array[StringName]([&"tip", &"sap"])
-desc = "末端；×(1 + 养分/10)"
-sap_mul = 0.1
+desc = "末端；×(1 + 0.3×养分)"
+sap_mul = 0.3

@@ -15,5 +15,5 @@ price = 5
 rarity = 1
 family = Array[StringName]([&"coin"])
 keywords = Array[StringName]([&"conduct", &"sap"])
-desc = "+当前养分"
-sap_add = 1
+desc = "+3×当前养分"
+sap_add = 3

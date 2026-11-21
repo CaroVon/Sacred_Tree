@@ -9,23 +9,33 @@ const RICH_BONUS := 2
 ## 共鸣：牌桌上同一流派的牌数达到这些阈值时分别激活第 1/2/3 层。木是基础流派，没有共鸣。
 const RESONANCE_STEPS: Array[int] = [2, 4, 6]
 ## 齿轮共鸣：联动加成的倍数；熔炉共鸣：火候倍率的倍数（按层数 0–3）。
-const GEAR_RES := [1.0, 1.5, 2.0, 3.0]
-const FORGE_RES := [1.0, 1.5, 2.0, 3.0]
+const GEAR_RES := [1.0, 2.0, 3.0, 4.0]
+const FORGE_RES := [1.0, 2.0, 3.0, 4.0]
 ## 星辰共鸣：整树总分倍率；商会共鸣：每次脉动额外养分；镜像共鸣：每对对称牌的总分加成；
 ## 封印共鸣：释放倍率每次封存额外 +x。
 const STAR_RES := [1.0, 1.1, 1.25, 1.5]
-const COIN_RES := [0, 1, 2, 4]
-const MIRROR_RES := [0.0, 0.05, 0.1, 0.2]
-const SEAL_RES := [0.0, 0.25, 0.5, 1.0]
+const COIN_RES := [0, 2, 3, 5]
+const MIRROR_RES := [0.0, 0.3, 0.6, 1.0]
+const SEAL_RES := [0.0, 0.5, 1.0, 2.0]
 ## 共鸣说明（界面用）：每层的效果。
-const RESONANCE_DESC := {
-	&"gear": "齿轮牌的联动加成 ×1.5 / ×2 / ×3",
-	&"forge": "熔炉的火候倍率 ×1.5 / ×2 / ×3；每燃烧一张牌火候再 +1 / +2 / +3",
-	&"star": "整树总分 ×1.1 / ×1.25 / ×1.5",
-	&"coin": "每次脉动额外 +1 / +2 / +4 养分",
-	&"mirror": "镜阵：牌桌上每一对对称的同类牌，总分 +5% / +10% / +20%",
-	&"seal": "封存释放时，每封存过一次脉动倍率再 +0.25 / +0.5 / +1",
-}
+## 共鸣说明（界面用），数字直接取自上面的常量。
+static func resonance_desc(f: StringName) -> String:
+	var tiers := func(arr: Array, fmt: String) -> String:
+		return " / ".join(arr.slice(1).map(func(x): return fmt % num(x) if fmt.contains("%s") else fmt))
+	match f:
+		&"gear":
+			return "齿轮牌的联动加成 %s" % tiers.call(GEAR_RES, "×%s")
+		&"forge":
+			return "熔炉的火候倍率 %s；每燃烧一张牌火候再 +1 / +2 / +3" % tiers.call(FORGE_RES, "×%s")
+		&"star":
+			return "整树总分 %s" % tiers.call(STAR_RES, "×%s")
+		&"coin":
+			return "每次脉动额外 %s 养分" % tiers.call(COIN_RES, "+%s")
+		&"mirror":
+			return "镜阵：牌桌上每一对对称的同类牌，总分 %s" % " / ".join(MIRROR_RES.slice(1).map(func(x): return "+%d%%" % roundi(x * 100)))
+		&"seal":
+			return "封存释放时，每封存过一次脉动倍率再 %s" % tiers.call(SEAL_RES, "+%s")
+	return ""
 
 
 ## 共鸣的一行文字：例如「齿轮 3/4」（已满 6 张写「齿轮 6 满」）。

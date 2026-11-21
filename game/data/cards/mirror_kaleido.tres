@@ -15,5 +15,5 @@ price = 5
 rarity = 1
 family = Array[StringName]([&"mirror"])
 keywords = Array[StringName]([&"tip", &"mirror"])
-desc = "末端；牌桌上每有一对对称的同类牌 +3"
-pair_add = 3
+desc = "末端；牌桌上每有一对对称的同类牌 +16"
+pair_add = 16

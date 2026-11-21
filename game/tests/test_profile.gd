@@ -62,7 +62,7 @@ func test_refine_makes_plus_card() -> void:
 	check_eq(plus.art_id(), &"stem")
 	check_eq(Cards.get_def(&"fruit+").value, 2.5)
 	check_eq(Cards.get_def(&"vine+").graft_self_mult, 1.5)
-	check_eq(Cards.get_def(&"gear_cog+").adj_family_add, 3)
+	check_eq(Cards.get_def(&"gear_cog+").adj_family_add, Cards.get_def(&"gear_cog").adj_family_add + 1)
 	check(not Cards.pool_ids().any(func(id): return String(id).ends_with("+")), "plus cards never in the pool")
 	var s := RunState.create(2)
 	s.phase = RunState.Phase.MARKET

@@ -15,7 +15,17 @@ const RELIC_PREF: Array[StringName] = [
 	&"root", &"dew", &"knife", &"chime", &"basket", &"shears", &"beehive", &"ruler", &"seedbag", &"compost",
 ]
 ## 规划者愿意为一个空芽点付出的分数（以“当前平均末梢收获”为单位）。
-const PORT_WEIGHT := 0.6
+const PORT_WEIGHT := 1.2
+## 一个空芽点都不剩时的惩罚（同样以平均末梢收获为单位）。
+const NO_PORT_PENALTY := 4.0
+## 封存的收获按这个倍数折算（季末释放会翻倍以上）；产出的养分每点折算成多少分（相对平均末梢）。
+const STORE_WEIGHT := 1.6
+const SAP_WEIGHT := 0.5
+## 主流派对应的启程者。
+const STARTER_FOR := {
+	&"wood": &"gardener", &"gear": &"artisan", &"forge": &"artisan",
+	&"star": &"stargazer", &"mirror": &"stargazer", &"coin": &"trader", &"seal": &"trader",
+}
 
 var policy: Policy = Policy.GREEDY
 ## 主流派（空 = 不限）：选牌、买牌时优先这个流派。
@@ -34,7 +44,7 @@ static func make(p: Policy, focus_family: StringName = &"") -> Bot:
 ## 跑完一局。ignore_targets 为真时不会因未达标而失败，用来测量每季的得分分布。
 ## 返回 {won, year, season, stages: [{year, season, score, target, passed}]}
 func run_game(run_seed: int, ignore_targets: bool = false) -> Dictionary:
-	var s := RunState.create(run_seed)
+	var s := RunState.create(run_seed, STARTER_FOR.get(focus, &"gardener"))
 	s.ignore_targets = ignore_targets
 	var stages := []
 	var guard := 0
@@ -109,10 +119,14 @@ func _best_placement(s: RunState) -> Dictionary:
 
 func _value(t: TreeModel, ctx: Pulse.Context) -> float:
 	var res := Pulse.resolve(t, ctx)
+	var base := res.total + STORE_WEIGHT * res.stored_total
 	if policy == Policy.GREEDY:
-		return res.total
-	var avg := float(res.total) / maxf(1.0, res.tip_list.size())
-	return res.total + PORT_WEIGHT * free_ports(t, ctx) * maxf(1.0, avg)
+		return base
+	var avg := float(res.total + res.stored_total) / maxf(1.0, res.tip_list.size())
+	var ports := free_ports(t, ctx)
+	# 没有空芽点的树等于停止生长：重罚；空芽点超过 6 个之后边际价值递减
+	var port_term := PORT_WEIGHT * mini(ports, 6) + 0.2 * maxi(0, ports - 6) - (NO_PORT_PENALTY if ports == 0 else 0.0)
+	return base + maxf(1.0, avg) * (port_term + SAP_WEIGHT * (res.sap_gain - res.sap_cost))
 
 
 static func free_ports(t: TreeModel, ctx: Pulse.Context) -> int:
@@ -159,6 +173,17 @@ func _rank(list: Array[StringName], id: StringName) -> int:
 	return i if i >= 0 else 999
 
 
+## 器物的偏好名次：主流派的徽章最先，其次主流派器物，再按旧偏好表；其余通用器物排在后面。
+func _rank_relic(id: StringName) -> int:
+	var r := Cards.relic(id)
+	if focus != &"" and r.family == focus:
+		return -100 if String(id).begins_with("badge_") else -50
+	var i := _rank(RELIC_PREF, id)
+	if i != 999:
+		return i
+	return 20 if r.family == &"" else 60
+
+
 ## 牌的偏好名次（越小越想要）：不在偏好表里的新牌按稀有度排；主流派的牌整体提前。
 func _rank_card(id: StringName) -> int:
 	var d := Cards.get_def(id)
@@ -181,16 +206,16 @@ func _choose_reward(s: RunState) -> void:
 func _choose_relic(s: RunState) -> void:
 	var best := 0
 	for i in s.relic_options.size():
-		if _rank(RELIC_PREF, s.relic_options[i]) < _rank(RELIC_PREF, s.relic_options[best]):
+		if _rank_relic(s.relic_options[i]) < _rank_relic(s.relic_options[best]):
 			best = i
 	if not s.relics_full():
 		s.choose_relic(best)
 		return
 	var worst := 0
 	for i in s.relics.size():
-		if _rank(RELIC_PREF, s.relics[i]) > _rank(RELIC_PREF, s.relics[worst]):
+		if _rank_relic(s.relics[i]) > _rank_relic(s.relics[worst]):
 			worst = i
-	if _rank(RELIC_PREF, s.relic_options[best]) < _rank(RELIC_PREF, s.relics[worst]):
+	if _rank_relic(s.relic_options[best]) < _rank_relic(s.relics[worst]):
 		s.choose_relic(best, worst)
 	else:
 		s.skip_relic()
@@ -231,7 +256,7 @@ func _shop(s: RunState) -> void:
 	while s.deck_counts().has(&"dead") and s.remove_card(&"dead"):
 		pass
 	for i in range(s.market_relics.size() - 1, -1, -1):
-		if _rank(RELIC_PREF, s.market_relics[i]) < 6:
+		if _rank_relic(s.market_relics[i]) < 6:
 			s.buy_relic(i)
 	var bought := true
 	while bought:
@@ -239,11 +264,24 @@ func _shop(s: RunState) -> void:
 		var best := -1
 		for i in s.market_cards.size():
 			var id := s.market_cards[i]
-			if _rank_card(id) < 30 and s.sap >= Cards.get_def(id).price:
+			if _rank_card(id) < 30 and s.sap >= s.card_price(id):
 				if best < 0 or _rank_card(id) < _rank_card(s.market_cards[best]):
 					best = i
 		if best >= 0:
 			bought = s.buy_card(best)
+	# 精炼一张主流派里最稀有的牌（留一点钱刻坚韧）
+	if s.sap >= s.service_price(Rules.REFINE_PRICE) + 4:
+		var pick := &""
+		for t in s.deck_counts():
+			var d := Cards.get_def(t)
+			if d.is_plus() or (focus != &"" and not d.has_family(focus)) or t == RunEvents.DEBT:
+				continue
+			if pick == &"" or d.rarity > Cards.get_def(pick).rarity or (d.rarity == Cards.get_def(pick).rarity and String(t) < String(pick)):
+				pick = t
+		if pick != &"":
+			s.refine(pick)
+	while s.deck_counts().has(RunEvents.DEBT) and s.remove_card(RunEvents.DEBT):
+		pass
 	var res := s.preview()
 	var tips := res.tip_list.duplicate()
 	tips.sort_custom(func(a, b): return res.contrib[a] > res.contrib[b])

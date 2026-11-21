@@ -720,6 +720,11 @@ func _sync_land(t: TreeModel) -> void:
 			Land.Type.LAVA: tint = Palette.EMBER
 			Land.Type.STARWELL: tint = Palette.ASTRAL
 			Land.Type.GOLDSAND: tint = Palette.COIN
+		# 新地块有专属贴图时直接用，没有就借沃土贴图染色
+		var own: StringName = Land.ART.get(lt, &"")
+		if own != &"" and CardArt.has(own):
+			art = own
+			tint = Color.WHITE
 		var tex := CardArt.texture(art)
 		if tex == null:
 			continue

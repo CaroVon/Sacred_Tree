@@ -15,5 +15,5 @@ price = 6
 rarity = 2
 family = Array[StringName]([&"gear"])
 keywords = Array[StringName]([&"tip", &"link"])
-desc = "末端；×(1 + 0.5×牌桌上的齿轮牌数)"
-family_count_mul = 0.5
+desc = "末端；×(1 + 1.5×牌桌上的齿轮牌数)"
+family_count_mul = 1.5

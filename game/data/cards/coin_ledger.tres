@@ -15,5 +15,5 @@ price = 4
 rarity = 1
 family = Array[StringName]([&"coin"])
 keywords = Array[StringName]([&"conduct", &"sap"])
-desc = "+本局在集市累计花费的养分 ÷5"
-spent_add = 0.2
+desc = "+0.5×本局在集市累计花费的养分"
+spent_add = 0.5

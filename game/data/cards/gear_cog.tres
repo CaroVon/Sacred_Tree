@@ -15,5 +15,5 @@ price = 3
 rarity = 0
 family = Array[StringName]([&"gear"])
 keywords = Array[StringName]([&"conduct", &"link"])
-desc = "+2；每个相邻的齿轮牌再 +2"
-adj_family_add = 2
+desc = "+2；每个相邻的齿轮牌再 +3"
+adj_family_add = 3

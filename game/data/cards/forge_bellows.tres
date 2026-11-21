@@ -15,5 +15,5 @@ price = 3
 rarity = 0
 family = Array[StringName]([&"forge"])
 keywords = Array[StringName]([&"tip", &"fuel"])
-desc = "末端，不加值；每次脉动火候 +1"
-pulse_heat = 1
+desc = "末端，不加值；每次脉动火候 +3"
+pulse_heat = 3

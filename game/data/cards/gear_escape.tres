@@ -15,5 +15,5 @@ price = 4
 rarity = 1
 family = Array[StringName]([&"gear"])
 keywords = Array[StringName]([&"tip"])
-desc = "末端，不加值；相邻其他末梢的收获 ×1.5"
-aura_tip_mul = 0.5
+desc = "末端，不加值；相邻其他末梢的收获 ×2"
+aura_tip_mul = 1.0

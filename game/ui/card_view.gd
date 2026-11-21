@@ -245,6 +245,7 @@ func _draw() -> void:
 
 	# ---------- 边框与角饰 ----------
 	_draw_frame(o, size, accent, up, k)
+	_draw_rarity(o, size, def.rarity, k)
 
 	# ---------- 左上角序号 ----------
 	if index >= 0 and index < 9:
@@ -285,6 +286,7 @@ func _draw_compact(def: CardDef, accent: Color) -> void:
 	draw_line(Vector2(r.position.x + pad, ly + 25), Vector2(r.position.x + pad + 26, ly + 25), Palette.GOLD, 1.2)
 	draw_string(Palette.caption(), Vector2(r.position.x + pad, ly + 41), def.category_name(),
 		HORIZONTAL_ALIGNMENT_LEFT, size.x - pad * 2, 12, accent.darkened(0.15))
+	_draw_rarity(r.position, r.size, def.rarity, size.x / W)
 	if selected:
 		draw_rect(r.grow(2.0), accent, false, 2.5)
 	if disabled:
@@ -292,6 +294,26 @@ func _draw_compact(def: CardDef, accent: Color) -> void:
 
 
 ## 卡片外框：细双线，像拓印出来的。
+## 稀有度边：稀有一圈银线，传说一圈金线加四角小菱形；精炼版在右上角压一枚金色「+」印。
+func _draw_rarity(o: Vector2, sz: Vector2, rarity: int, k: float) -> void:
+	var def := Cards.get_def(card_id)
+	if rarity >= 1:
+		var col := Palette.GOLD if rarity >= 2 else Color("#B9BDC2")
+		var r := Rect2(o, sz).grow(-2.0 * k)
+		draw_rect(r, col, false, maxf(1.5, (2.4 if rarity >= 2 else 1.6) * k))
+		if rarity >= 2:
+			var d := maxf(3.0, 4.5 * k)
+			for c in [r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y)]:
+				draw_colored_polygon(PackedVector2Array([c + Vector2(0, -d), c + Vector2(d, 0), c + Vector2(0, d), c + Vector2(-d, 0)]), col)
+	if def and def.is_plus():
+		var c := o + Vector2(sz.x - 16.0 * k, 16.0 * k)
+		draw_circle(c, 10.0 * k, Palette.GOLD)
+		draw_circle(c, 8.5 * k, Palette.INK)
+		var w := 6.0 * k
+		draw_line(c - Vector2(w, 0), c + Vector2(w, 0), Palette.GOLD, maxf(1.5, 2.0 * k))
+		draw_line(c - Vector2(0, w), c + Vector2(0, w), Palette.GOLD, maxf(1.5, 2.0 * k))
+
+
 func _draw_frame(o: Vector2, sz: Vector2, accent: Color, up: float, k: float) -> void:
 	var r := Rect2(o, sz)
 	draw_rect(r, Palette.INK, false, maxf(1.0, 1.6 * k))

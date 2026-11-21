@@ -17,6 +17,8 @@ const DESCS := [
 ]
 const FERTILE_BONUS := 2
 const SPRING_BONUS := 2
+## 新地块的贴图 id（界面用；缺图时界面会借沃土贴图染色）。
+const ART := {Type.ORE: &"land_ore", Type.LAVA: &"land_lava", Type.STARWELL: &"land_starwell", Type.GOLDSAND: &"land_goldsand"}
 ## 新流派地块（每年外扩时随机撒在新圈上）。
 const SPECIALS: Array[int] = [Type.ORE, Type.LAVA, Type.STARWELL, Type.GOLDSAND]
 ## 地块离树心的最小距离。

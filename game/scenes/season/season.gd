@@ -568,7 +568,7 @@ func _refresh_resonance(res: Pulse.Result) -> void:
 		var t := Pulse.resonance_text(f, res.family_counts[f])
 		var tier: int = res.resonance.get(f, 0)
 		parts.append(t + ("（%d 层）" % tier if tier > 0 else ""))
-		tips.append("%s：%s" % [CardDef.FAMILY_NAMES[f], Pulse.RESONANCE_DESC.get(f, "")])
+		tips.append("%s：%s" % [CardDef.FAMILY_NAMES[f], Pulse.resonance_desc(f)])
 	lbl_res.visible = not parts.is_empty()
 	lbl_res.text = "共鸣　" + "　".join(parts)
 	lbl_res.tooltip_text = "牌桌上同一流派的牌达到 2 / 4 / 6 张时激活共鸣。
