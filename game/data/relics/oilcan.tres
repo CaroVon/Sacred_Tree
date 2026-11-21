@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="RelicDef" format=3]
+
+[ext_resource type="Script" path="res://core/relic_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"oilcan"
+display_name = "油壶"
+desc = "齿轮牌的联动加成每张再 +1"
+price = 7
+family = &"gear"

@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="RelicDef" format=3]
+
+[ext_resource type="Script" path="res://core/relic_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"silvering"
+display_name = "镀银"
+desc = "镜阵每一对的总分加成再 +5%"
+price = 7
+family = &"mirror"

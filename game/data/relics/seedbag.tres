@@ -7,3 +7,4 @@ script = ExtResource("1")
 id = &"seedbag"
 display_name = "种子袋"
 desc = "季末选牌多 1 个选项"
+price = 6

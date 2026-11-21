@@ -81,7 +81,7 @@ func _init() -> void:
 func _ready() -> void:
 	var def := Cards.get_def(card_id)
 	if def:
-		tooltip_text = "%s（%s）\n%s" % [def.display_name, def.category_name(), def.desc]
+		tooltip_text = "%s（%s）\n%s" % [def.display_name, def.tag_line(), def.desc]
 	if not compact:
 		_enable_tilt(def)
 
@@ -162,7 +162,7 @@ func _draw() -> void:
 
 	# ---------- 上部：印刷图版 ----------
 	var art_rect := Rect2(o.x, o.y, size.x, art_h)
-	CardArt.draw_plate(self, def.id, art_rect)
+	CardArt.draw_plate(self, def.art_id(), art_rect)
 	# 图版与题名带之间的细金线
 	draw_line(Vector2(o.x, art_rect.position.y + art_rect.size.y),
 		Vector2(o.x + size.x, art_rect.position.y + art_rect.size.y), Palette.GOLD, maxf(1.0, 1.5 * k))
@@ -216,7 +216,10 @@ func _draw() -> void:
 		draw_string(body, Vector2(o.x + 11.0 * k, sub_y), note,
 			HORIZONTAL_ALIGNMENT_LEFT, size.x - 22.0 * k, int(round(12.0 * k)), ncol)
 	else:
-		var cat := def.category_name()
+		# 新流派显示流派名（流派色）；木系显示类别
+		var cat := def.category_name() if def.family.is_empty() else def.family_label()
+		if not def.family.is_empty():
+			accent = Palette.family_color(def.families()[0])
 		var cat_fs := int(round(12.0 * k))
 		var csz := body.get_string_size(cat, HORIZONTAL_ALIGNMENT_LEFT, -1, cat_fs)
 		var plaque := Rect2(o.x + (size.x - csz.x - 16.0 * k) * 0.5, sub_y - 13.0 * k,
@@ -233,6 +236,12 @@ func _draw() -> void:
 		if def.is_graft():
 			draw_string(body, Vector2(o.x + 11.0 * k, band_rect.position.y + band_rect.size.y - 6.0 * k),
 				"嫁接", HORIZONTAL_ALIGNMENT_LEFT, -1, int(round(12.0 * k)), accent)
+		# 稀有度（右下角）：稀有一枚、传说两枚金色菱形
+		for i in def.rarity:
+			var c := Vector2(o.x + size.x - (12.0 + i * 11.0) * k, band_rect.position.y + band_rect.size.y - 11.0 * k)
+			var d := maxf(3.0, 4.2 * k)
+			draw_colored_polygon(PackedVector2Array([c + Vector2(0, -d), c + Vector2(d, 0), c + Vector2(0, d), c + Vector2(-d, 0)]),
+				Palette.GOLD if def.rarity >= 2 else Palette.STONE)
 
 	# ---------- 边框与角饰 ----------
 	_draw_frame(o, size, accent, up, k)
@@ -265,7 +274,7 @@ func _draw_compact(def: CardDef, accent: Color) -> void:
 	# 图版 + 金色双线框
 	var pad := 8.0
 	var art_rect := Rect2(r.position + Vector2(pad, pad), Vector2(size.x - pad * 2, size.x - pad * 2))
-	CardArt.draw_plate(self, def.id, art_rect)
+	CardArt.draw_plate(self, def.art_id(), art_rect)
 	draw_rect(art_rect.grow(2.0), Palette.GOLD, false, 1.2)
 	draw_rect(art_rect.grow(4.0), Color(Palette.GOLD, 0.45), false, 1.0)
 	# 展签

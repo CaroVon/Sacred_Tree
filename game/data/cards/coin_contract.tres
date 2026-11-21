@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="CardDef" format=3]
+
+[ext_resource type="Script" path="res://core/card_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"coin_contract"
+display_name = "契约"
+category = 0
+ports = PackedInt32Array(0)
+effect = 3
+value = 3.0
+color_key = &"coin"
+price = 5
+rarity = 1
+family = Array[StringName]([&"coin"])
+keywords = Array[StringName]([&"conduct", &"sap"])
+desc = "×3；每次脉动花 2 养分，养分不够时流出 0"
+pulse_cost = 2

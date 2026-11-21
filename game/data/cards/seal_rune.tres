@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="CardDef" format=3]
+
+[ext_resource type="Script" path="res://core/card_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"seal_rune"
+display_name = "符文石"
+category = 0
+ports = PackedInt32Array(0)
+effect = 1
+value = 2.0
+color_key = &"seal"
+price = 3
+rarity = 0
+family = Array[StringName]([&"seal"])
+keywords = Array[StringName]([&"conduct", &"store"])
+desc = "+2；相邻封印牌释放时，每次封存的倍率再 +0.5"
+release_adj_bonus = 0.5

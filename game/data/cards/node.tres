@@ -15,4 +15,4 @@ prune_value = 1
 color_key = &"green"
 in_reward_pool = true
 desc = "+所在深度（离树心越远加得越多）"
-price = 5
+price = 4

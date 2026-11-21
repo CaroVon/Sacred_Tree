@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="CardDef" format=3]
+
+[ext_resource type="Script" path="res://core/card_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"star_moon"
+display_name = "满月"
+category = 2
+ports = PackedInt32Array()
+effect = 3
+value = 1.0
+color_key = &"astral"
+price = 5
+rarity = 1
+family = Array[StringName]([&"star"])
+keywords = Array[StringName]([&"tip", &"timing"])
+desc = "末端；×当前回合数（第 5 回合 ×5）"
+turn_mul = true

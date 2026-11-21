@@ -4,4 +4,8 @@ extends Resource
 
 @export var id: StringName
 @export var display_name: String = ""
+## 集市价格（养分）；出售返还一半。
+@export var price: int = 8
+## 所属流派（空 = 通用），用于奖励引导与图鉴分组。
+@export var family: StringName = &""
 @export_multiline var desc: String = ""

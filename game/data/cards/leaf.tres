@@ -11,6 +11,6 @@ ports = PackedInt32Array()
 effect = 1
 value = 1.0
 color_key = &"grey"
-price = 4
+price = 3
 desc = "+1，末端；被剪掉时，下次脉动所有末梢 +3"
 prune_tip_bonus = 3

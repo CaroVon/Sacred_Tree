@@ -7,3 +7,4 @@ script = ExtResource("1")
 id = &"ruler"
 display_name = "年轮尺"
 desc = "长茎只需连续 5 张"
+price = 7

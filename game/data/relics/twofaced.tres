@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="RelicDef" format=3]
+
+[ext_resource type="Script" path="res://core/relic_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"twofaced"
+display_name = "双面镜"
+desc = "对称的牌对不再要求同类，两边都有牌就算一对"
+price = 8
+family = &"mirror"

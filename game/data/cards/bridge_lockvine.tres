@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="CardDef" format=3]
+
+[ext_resource type="Script" path="res://core/card_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"bridge_lockvine"
+display_name = "锁藤"
+category = 4
+ports = PackedInt32Array()
+effect = 5
+value = 0.0
+color_key = &"gold"
+price = 6
+rarity = 2
+family = Array[StringName]([&"wood", &"gear"])
+keywords = Array[StringName]([&"link"])
+desc = "同藤：放在挨着 2 个以上末梢的空格，养分相乘；同时算作齿轮牌"

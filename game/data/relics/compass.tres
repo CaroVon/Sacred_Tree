@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="RelicDef" format=3]
+
+[ext_resource type="Script" path="res://core/relic_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"compass"
+display_name = "罗盘"
+desc = "季末选牌时，至少一个选项来自你牌组里最多的新流派"
+price = 6
+family = &""

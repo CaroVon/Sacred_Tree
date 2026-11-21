@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="CardDef" format=3]
+
+[ext_resource type="Script" path="res://core/card_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"coin_ledger"
+display_name = "账本"
+category = 0
+ports = PackedInt32Array(0)
+effect = 1
+value = 0.0
+color_key = &"coin"
+price = 4
+rarity = 1
+family = Array[StringName]([&"coin"])
+keywords = Array[StringName]([&"conduct", &"sap"])
+desc = "+本局在集市累计花费的养分 ÷5"
+spent_add = 0.2

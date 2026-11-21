@@ -17,6 +17,11 @@ var order: int = 0
 var age: int = 0
 ## 年轮印记。
 var marks: Array[StringName] = []
+## 集市“芽点”服务追加的芽点（绝对方向 0..5）。
+var extra_ports: Array[int] = []
+## 封印：封存的收获与封存过的脉动次数（季末或提前收获时释放）。
+var stored: int = 0
+var sealed: int = 0
 
 
 func is_seed() -> bool:
@@ -25,6 +30,11 @@ func is_seed() -> bool:
 
 func def() -> CardDef:
 	return null if is_seed() else Cards.get_def(type)
+
+
+## 坚韧：刻了“坚韧”年轮，或牌本身天生坚韧。
+func is_tough() -> bool:
+	return marks.has(&"tough") or (not is_seed() and def().innate_tough)
 
 
 func copy() -> TreeNode:
@@ -38,6 +48,9 @@ func copy() -> TreeNode:
 	n.order = order
 	n.age = age
 	n.marks = marks.duplicate()
+	n.extra_ports = extra_ports.duplicate()
+	n.stored = stored
+	n.sealed = sealed
 	return n
 
 
@@ -49,6 +62,8 @@ func to_dict() -> Dictionary:
 		"key": [key.x, key.y], "type": String(type), "parents": ps,
 		"facing": facing, "depth": depth, "order": order, "age": age,
 		"marks": marks.map(func(m): return String(m)),
+		"extra_ports": extra_ports.duplicate(),
+		"stored": stored, "sealed": sealed,
 	}
 
 
@@ -64,4 +79,8 @@ static func from_dict(d: Dictionary) -> TreeNode:
 	n.age = int(d.get("age", 0))
 	for m in d.get("marks", []):
 		n.marks.append(StringName(m))
+	for p in d.get("extra_ports", []):
+		n.extra_ports.append(int(p))
+	n.stored = int(d.get("stored", 0))
+	n.sealed = int(d.get("sealed", 0))
 	return n

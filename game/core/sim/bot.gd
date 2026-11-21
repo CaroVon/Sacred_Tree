@@ -18,11 +18,14 @@ const RELIC_PREF: Array[StringName] = [
 const PORT_WEIGHT := 0.6
 
 var policy: Policy = Policy.GREEDY
+## 主流派（空 = 不限）：选牌、买牌时优先这个流派。
+var focus: StringName = &""
 
 
-static func make(p: Policy) -> Bot:
+static func make(p: Policy, focus_family: StringName = &"") -> Bot:
 	var b := Bot.new()
 	b.policy = p
+	b.focus = focus_family
 	return b
 
 
@@ -43,11 +46,20 @@ func run_game(run_seed: int, ignore_targets: bool = false) -> Dictionary:
 			RunState.Phase.PLAY:
 				var y := s.year
 				var se := s.season
+				if not ignore_targets and s.can_harvest():
+					stages.append({"year": y, "season": se, "score": s.score,
+						"target": Rules.target(se, y), "passed": true})
+					s.harvest()
+					continue
 				play_turn(s)
+				if s.phase == RunState.Phase.DISCARD:
+					continue
 				s.end_turn()
-				if s.phase != RunState.Phase.PLAY:
+				if s.phase != RunState.Phase.PLAY and s.phase != RunState.Phase.DISCARD:
 					stages.append({"year": y, "season": se, "score": s.score,
 						"target": Rules.target(se, y), "passed": s.score >= Rules.target(se, y)})
+			RunState.Phase.DISCARD:
+				_discard(s)
 			RunState.Phase.REWARD:
 				_choose_reward(s)
 			RunState.Phase.RELIC:
@@ -67,7 +79,8 @@ func play_turn(s: RunState) -> void:
 			if policy == Policy.PLANNER and _unstick(s):
 				continue
 			return
-		s.place(best.i, best.k)
+		if not s.place(best.i, best.k):
+			return
 
 
 ## 对每张手牌只算一次可放位置，再逐个格子在树的副本上试放。
@@ -78,7 +91,7 @@ func _best_placement(s: RunState) -> Dictionary:
 	var seen := {}
 	for i in s.hand.size():
 		var type := s.hand[i]
-		if seen.has(type):
+		if seen.has(type) or s.is_fresh(i):
 			continue
 		seen[type] = true
 		var tg := Growth.targets_for(s.tree, type, ctx)
@@ -144,10 +157,21 @@ func _rank(list: Array[StringName], id: StringName) -> int:
 	return i if i >= 0 else 999
 
 
+## 牌的偏好名次（越小越想要）：不在偏好表里的新牌按稀有度排；主流派的牌整体提前。
+func _rank_card(id: StringName) -> int:
+	var d := Cards.get_def(id)
+	var r := _rank(CARD_PREF, id)
+	if r == 999:
+		r = 20 - d.rarity * 8
+	if focus != &"" and d.has_family(focus):
+		r -= 1000
+	return r
+
+
 func _choose_reward(s: RunState) -> void:
 	var best := 0
 	for i in s.reward_options.size():
-		if _rank(CARD_PREF, s.reward_options[i]) < _rank(CARD_PREF, s.reward_options[best]):
+		if _rank_card(s.reward_options[i]) < _rank_card(s.reward_options[best]):
 			best = i
 	s.choose_reward(best)
 
@@ -157,7 +181,27 @@ func _choose_relic(s: RunState) -> void:
 	for i in s.relic_options.size():
 		if _rank(RELIC_PREF, s.relic_options[i]) < _rank(RELIC_PREF, s.relic_options[best]):
 			best = i
-	s.choose_relic(best)
+	if not s.relics_full():
+		s.choose_relic(best)
+		return
+	var worst := 0
+	for i in s.relics.size():
+		if _rank(RELIC_PREF, s.relics[i]) > _rank(RELIC_PREF, s.relics[worst]):
+			worst = i
+	if _rank(RELIC_PREF, s.relic_options[best]) < _rank(RELIC_PREF, s.relics[worst]):
+		s.choose_relic(best, worst)
+	else:
+		s.skip_relic()
+
+
+## 弃牌：先弃偏好最低的牌。
+func _discard(s: RunState) -> void:
+	while s.phase == RunState.Phase.DISCARD:
+		var worst := 0
+		for i in s.hand.size():
+			if _rank_card(s.hand[i]) > _rank_card(s.hand[worst]):
+				worst = i
+		s.discard_card(worst)
 
 
 func _shop(s: RunState) -> void:
@@ -166,14 +210,17 @@ func _shop(s: RunState) -> void:
 	# 删掉枯枝，再按偏好买牌，剩下的钱给收获最高的末梢刻“坚韧”（防冬季枯萎和天灾）
 	while s.deck_counts().has(&"dead") and s.remove_card(&"dead"):
 		pass
+	for i in range(s.market_relics.size() - 1, -1, -1):
+		if _rank(RELIC_PREF, s.market_relics[i]) < 6:
+			s.buy_relic(i)
 	var bought := true
 	while bought:
 		bought = false
 		var best := -1
 		for i in s.market_cards.size():
 			var id := s.market_cards[i]
-			if _rank(CARD_PREF, id) < 10 and s.sap >= Cards.get_def(id).price:
-				if best < 0 or _rank(CARD_PREF, id) < _rank(CARD_PREF, s.market_cards[best]):
+			if _rank_card(id) < 30 and s.sap >= Cards.get_def(id).price:
+				if best < 0 or _rank_card(id) < _rank_card(s.market_cards[best]):
 					best = i
 		if best >= 0:
 			bought = s.buy_card(best)

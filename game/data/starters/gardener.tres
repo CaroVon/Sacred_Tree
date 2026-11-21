@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="StarterDef" format=3]
+
+[ext_resource type="Script" path="res://core/starter_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"gardener"
+display_name = "园丁"
+desc = "老练的园丁：果与藤的经典起手。"
+deck = { &"stem": 4, &"node": 2, &"fork": 3, &"tri": 1, &"fruit": 3, &"flower": 2, &"vine": 1, &"dead": 2 }
+relic = &""
+families = Array[StringName]([&"wood"])
+order = 0

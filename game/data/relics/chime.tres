@@ -7,3 +7,4 @@ script = ExtResource("1")
 id = &"chime"
 display_name = "风铃"
 desc = "每季最后一回合多放 1 张"
+price = 8

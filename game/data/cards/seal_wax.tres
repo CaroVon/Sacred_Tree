@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="CardDef" format=3]
+
+[ext_resource type="Script" path="res://core/card_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"seal_wax"
+display_name = "蜡封"
+category = 2
+ports = PackedInt32Array()
+effect = 1
+value = 3.0
+color_key = &"seal"
+price = 3
+rarity = 0
+family = Array[StringName]([&"seal"])
+keywords = Array[StringName]([&"tip", &"store"])
+desc = "+3，末端；自己的收获封存，季末释放 ×(1 + 0.5×封存次数)"
+seal_self = true

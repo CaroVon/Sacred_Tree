@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="CardDef" format=3]
+
+[ext_resource type="Script" path="res://core/card_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"star_meteor"
+display_name = "流星"
+category = 2
+ports = PackedInt32Array()
+effect = 1
+value = 2.0
+color_key = &"astral"
+price = 4
+rarity = 1
+family = Array[StringName]([&"star"])
+keywords = Array[StringName]([&"tip", &"timing"])
+desc = "+2，末端；每季最后一回合 ×6"
+last_turn_mult = 6

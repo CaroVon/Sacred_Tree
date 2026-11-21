@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="CardDef" format=3]
+
+[ext_resource type="Script" path="res://core/card_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"forge_phoenix"
+display_name = "凤凰羽"
+category = 2
+ports = PackedInt32Array()
+effect = 3
+value = 3.0
+color_key = &"ember"
+price = 6
+rarity = 2
+family = Array[StringName]([&"forge"])
+keywords = Array[StringName]([&"tip", &"fuel"])
+desc = "末端 ×3；燃烧时火候额外 +5"
+heat_on_burn = 5

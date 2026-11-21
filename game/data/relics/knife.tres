@@ -7,3 +7,4 @@ script = ExtResource("1")
 id = &"knife"
 display_name = "嫁接刀"
 desc = "藤的养分 ×1.5"
+price = 9

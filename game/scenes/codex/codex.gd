@@ -1,7 +1,20 @@
 extends Control
-## 牌组图鉴：「牌」页逐张查看规则与牌桌演示；「规则与名词」页解释基本概念。
+## 牌组图鉴：「牌」页按流派逐张查看规则、牌桌演示与收藏统计；「联动谱」记录搭出过的组合；
+## 「规则与名词」页解释基本概念。
+
+const FAMILY_HELP := {
+	&"wood": "基础流派：成熟、相邻与嫁接。果与藤的值×值是它的招牌。",
+	&"gear": "联动：相邻的齿轮牌越多越强，枢纽把一整簇齿轮接成一个大末梢。",
+	&"forge": "燃料：任何牌离开牌桌都添火候，火候整局累积；冬季枯萎和天灾也是燃料。",
+	&"star": "时机：按回合数、最后一回合、季节变强；星图叠乘整树总分，排成直线成连星。",
+	&"coin": "养分：把养分变成分数，也能用来买器物与服务。",
+	&"mirror": "镜像：点对称位置互相映照；幻影能替别的流派凑共鸣。",
+	&"seal": "封存：把收获存起来，季末或提前收获时成倍释放。",
+	&"bridge": "桥牌：同时属于两个流派，两边的共鸣都算。",
+}
 
 var tab_cards: Button
+var tab_combos: Button
 var tab_terms: Button
 var list_scroll: ScrollContainer
 var list_box: VBoxContainer
@@ -43,6 +56,10 @@ func _ready() -> void:
 	tab_cards.text = "牌"
 	tab_cards.pressed.connect(_show_cards)
 	head.add_child(tab_cards)
+	tab_combos = Button.new()
+	tab_combos.text = "联动谱"
+	tab_combos.pressed.connect(_show_combos)
+	head.add_child(tab_combos)
 	tab_terms = Button.new()
 	tab_terms.text = "规则与名词"
 	tab_terms.pressed.connect(_show_terms)
@@ -148,17 +165,28 @@ func _back() -> void:
 
 func _show_cards() -> void:
 	tab_cards.theme_type_variation = &"PrimaryButton"
+	tab_combos.theme_type_variation = &""
 	tab_terms.theme_type_variation = &""
 	_clear_list()
-	for cat in CardDef.CATEGORY_NAMES.size():
+	var groups: Array[StringName] = []
+	for f in CardDef.FAMILY_NAMES:
+		groups.append(f)
+	groups.append(&"bridge")
+	for g in groups:
 		var ids: Array[StringName] = []
 		for id in Cards.all_ids():
-			if Cards.get_def(id).category == cat:
+			var fs := Cards.get_def(id).families()
+			if (g == &"bridge" and fs.size() >= 2) or (g != &"bridge" and fs.size() == 1 and fs[0] == g):
 				ids.append(id)
 		if ids.is_empty():
 			continue
 		var h := Label.new()
-		h.text = "%s牌　%s" % [CardDef.CATEGORY_NAMES[cat], CardDemo.CATEGORY_HELP[cat]]
+		var gname: String = "桥牌" if g == &"bridge" else CardDef.FAMILY_NAMES[g]
+		var lock := ""
+		if g != &"bridge" and not Game.profile.has_family(g):
+			lock = "　【未解锁：%s】" % Game.profile.unlock_hint_family(g)
+		h.text = "%s　%s%s" % [gname, FAMILY_HELP.get(g, ""), lock]
+		h.add_theme_color_override("font_color", Palette.family_color(g) if g != &"bridge" else Palette.GOLD)
 		h.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		h.theme_type_variation = &"SoftLabel"
 		list_box.add_child(h)
@@ -194,7 +222,11 @@ func _select_card(id: StringName) -> void:
 	if card_view:
 		card_view.card_id = id
 		card_view.queue_redraw()
-	rules_l.text = "牌面：%s\n\n%s" % [def.desc, CardDemo.rules_text(def)]
+	var st := Game.profile.card_stats(id)
+	var stat_line := "【收藏】还没有在对局里用过。"
+	if not st.is_empty():
+		stat_line = "【收藏】最高单次贡献 %d · 出场 %d 局" % [int(st.get("best", 0)), int(st.get("runs", 0))]
+	rules_l.text = "%s\n牌面：%s\n\n%s\n%s" % [def.tag_line(), def.desc, CardDemo.rules_text(def), stat_line]
 	_rebuild_controls(def)
 	_render_card_demo()
 
@@ -322,9 +354,55 @@ func _on_hover_cleared() -> void:
 
 # ---------- 规则与名词页 ----------
 
+# ---------- 联动谱 ----------
+
+func _show_combos() -> void:
+	tab_combos.theme_type_variation = &"PrimaryButton"
+	tab_cards.theme_type_variation = &""
+	tab_terms.theme_type_variation = &""
+	_clear_list()
+	var found := 0
+	for c in Combos.LIST:
+		if Game.profile.combo_found(c):
+			found += 1
+	var h := Label.new()
+	h.text = "已发现 %d / %d 条联动。在对局里搭出这些组合，就会记录在这里。" % [found, Combos.LIST.size()]
+	h.theme_type_variation = &"SoftLabel"
+	h.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	list_box.add_child(h)
+	var keys := Combos.LIST.keys()
+	for c in keys:
+		var b := Button.new()
+		var ok := Game.profile.combo_found(c)
+		b.text = ("✦ " if ok else "？ ") + (Combos.LIST[c].name if ok else "未发现的联动")
+		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		b.add_theme_font_size_override("font_size", 22)
+		b.pressed.connect(_select_combo.bind(c))
+		list_box.add_child(b)
+	_select_combo(keys[0])
+
+
+func _select_combo(c: StringName) -> void:
+	var info: Dictionary = Combos.LIST[c]
+	var ok := Game.profile.combo_found(c)
+	title_l.text = info.name if ok else "未发现的联动"
+	if ok:
+		var d: Dictionary = Game.profile.data.combos[String(c)]
+		rules_l.text = "%s\n\n搭配：%s\n\n首次搭出：第 %d 年%s" % [info.desc, info.hint, int(d.get("year", 1)), Rules.season_name(int(d.get("season", 1)))]
+	else:
+		rules_l.text = "线索：%s" % info.hint
+	for ch in controls.get_children():
+		ch.queue_free()
+	chain_l.text = ""
+	note_l.text = ""
+	board.visible = false
+	board.get_parent().visible = false
+
+
 func _show_terms() -> void:
 	tab_terms.theme_type_variation = &"PrimaryButton"
 	tab_cards.theme_type_variation = &""
+	tab_combos.theme_type_variation = &""
 	_clear_list()
 	for i in Glossary.TERMS.size():
 		var b := Button.new()

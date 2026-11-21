@@ -15,4 +15,4 @@ prune_value = 1
 color_key = &"blue"
 in_reward_pool = true
 desc = "−2，向三个方向分枝"
-price = 6
+price = 4

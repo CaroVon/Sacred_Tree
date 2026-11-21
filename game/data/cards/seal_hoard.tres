@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="CardDef" format=3]
+
+[ext_resource type="Script" path="res://core/card_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"seal_hoard"
+display_name = "秘藏"
+category = 2
+ports = PackedInt32Array()
+effect = 3
+value = 2.0
+color_key = &"seal"
+price = 6
+rarity = 2
+family = Array[StringName]([&"seal"])
+keywords = Array[StringName]([&"tip", &"store"])
+desc = "×2，末端；自己的收获封存，季末释放 ×(1 + 0.75×封存次数)"
+seal_rate = 0.75
+seal_self = true

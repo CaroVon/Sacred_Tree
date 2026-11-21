@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="CardDef" format=3]
+
+[ext_resource type="Script" path="res://core/card_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"star_chart"
+display_name = "星图"
+category = 3
+ports = PackedInt32Array()
+effect = 0
+value = 0.0
+color_key = &"astral"
+price = 7
+rarity = 2
+family = Array[StringName]([&"star"])
+keywords = Array[StringName]([&"timing"])
+desc = "末端；整树总分 ×(1 + 0.1×牌桌上的星辰牌数)，多张星图叠乘"
+star_total_mult = 0.1

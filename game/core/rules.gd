@@ -3,7 +3,10 @@ extends RefCounted
 ## 全部可调参数集中在这里（对应网页原型最上方的“配置”区）。
 ## 一局 = YEARS 年；每年 = 春夏秋冬四季 + 一个天灾季（第 5 季）。
 
+## 网页原型与测试用的牌桌半径；实际对局按年份扩张，见 radius_for_year。
 const RADIUS := 4
+## 牌桌逐年扩张：第 1/2/3 年的半径。
+const RADII := [5, 6, 7]
 const YEARS := 3
 const STAGES := 5          # 每年的季数（含天灾季）
 const CALAMITY_STAGE := 5
@@ -17,34 +20,57 @@ const TARGETS := [
 const SEASON_NAMES: Array[String] = ["春", "夏", "秋", "冬", "天灾"]
 const TURNS := 5
 const CALAMITY_TURNS := 3
-const HAND := 4
-const PLAYS := 2
+const HAND := 6
+const PLAYS := 3
 const PRUNES := 1
+## 每回合可移栽次数（把一张牌连同子枝挪到另一个芽点）。
+const TRANSPLANTS := 1
 const REDRAW_COST := 2
 const SKIP_REWARD_SAP := 3
 const REWARD_CHOICES := 3
 const RELIC_CHOICES := 3
-const SEASON_CLEAR_SAP := 2
+const SEASON_CLEAR_SAP := 4
 const CALAMITY_CLEAR_SAP := 8
+## 提前收获：本季每剩 1 回合得多少养分。
+const HARVEST_SAP_PER_TURN := 2
+## 器物槽数量；出售器物返还的比例。
+const RELIC_SLOTS := 6
+const RELIC_SELL_RATIO := 0.5
 
 const START_DECK := {
 	&"stem": 4, &"node": 2, &"fork": 3, &"tri": 1,
 	&"fruit": 3, &"flower": 2, &"vine": 1, &"dead": 2,
 }
 ## 开局土地与每年新增土地。
-const START_LAND := {Land.Type.FERTILE: 4, Land.Type.ROCK: 4, Land.Type.SPRING: 2}
+const START_LAND := {Land.Type.FERTILE: 5, Land.Type.ROCK: 5, Land.Type.SPRING: 3}
 const YEARLY_LAND := {Land.Type.FERTILE: 1, Land.Type.ROCK: 1, Land.Type.SPRING: 1}
+## 牌桌每年外扩一圈时，新圈上额外撒的地块。
+const RING_LAND := {Land.Type.FERTILE: 2, Land.Type.ROCK: 2, Land.Type.SPRING: 1}
 
 ## 年轮印记：作用于树上的某一张牌。
 const MARKS := {
-	&"tough": {"name": "坚韧", "short": "韧", "price": 6, "desc": "不会在冬季枯萎，也不会被天灾伤害"},
-	&"lush": {"name": "繁茂", "short": "茂", "price": 7, "desc": "多 1 个芽点"},
-	&"rich": {"name": "丰饶", "short": "丰", "price": 6, "desc": "流出养分 +2"},
+	&"tough": {"name": "坚韧", "short": "韧", "price": 4, "desc": "不会在冬季枯萎，也不会被天灾伤害"},
+	&"rich": {"name": "丰饶", "short": "丰", "price": 4, "desc": "流出养分 +2"},
+	&"fireproof": {"name": "耐火", "short": "耐", "price": 4, "desc": "离开牌桌时火候额外 +3"},
+	&"gilded": {"name": "镀金", "short": "金", "price": 5, "desc": "被剪掉时这张牌给的养分 ×2"},
+	&"echo": {"name": "回响", "short": "响", "price": 12, "desc": "流出养分 ×2"},
 }
-const MARKET_CARD_OFFERS := 4
-const REMOVE_CARD_PRICE := 4
-const CLEAR_ROCK_PRICE := 4
-const MAKE_FERTILE_PRICE := 6
+## 芽点服务：给一张牌在指定方向加 1 个芽点。
+const PORT_PRICE := 5
+const MAX_EXTRA_PORTS := 2
+const MARKET_CARD_OFFERS := 5
+const MARKET_RELIC_OFFERS := 2
+const REMOVE_CARD_PRICE := 3
+const CLEAR_ROCK_PRICE := 3
+const MAKE_FERTILE_PRICE := 4
+## 精炼一张牌的价格。
+const REFINE_PRICE := 6
+## 抽选时，已有主流派的牌权重倍数。
+const FAMILY_BIAS := 4.0
+
+
+static func radius_for_year(year: int) -> int:
+	return RADII[clampi(year, 1, RADII.size()) - 1]
 
 
 ## 神树之心每季成熟一次，输出翻倍：春 1、夏 2、秋 4、冬 8；第 y 年再乘以 y。天灾季沿用冬季。

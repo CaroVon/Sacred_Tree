@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="CardDef" format=3]
+
+[ext_resource type="Script" path="res://core/card_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"mirror_kaleido"
+display_name = "万花筒"
+category = 2
+ports = PackedInt32Array()
+effect = 1
+value = 0.0
+color_key = &"mirror"
+price = 5
+rarity = 1
+family = Array[StringName]([&"mirror"])
+keywords = Array[StringName]([&"tip", &"mirror"])
+desc = "末端；牌桌上每有一对对称的同类牌 +3"
+pair_add = 3

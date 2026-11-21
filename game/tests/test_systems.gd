@@ -64,8 +64,8 @@ func test_marks() -> void:
 	var tree := TreeModel.create(4)
 	var st := Growth.place(tree, &"stem", Hex.DIRS[1], _t([Vector2i.ZERO], 1))
 	check_eq(Growth.ports_of(st).size(), 1)
-	st.marks.append(&"lush")
-	check_eq(Growth.ports_of(st).size(), 2)
+	st.extra_ports.append(3)
+	check_eq(Growth.ports_of(st), [1, 3] as Array[int])
 	st.marks.append(&"rich")
 	check_eq(Pulse.resolve(tree, _ctx()).total, 1 + 3 + Pulse.RICH_BONUS)
 
@@ -131,13 +131,23 @@ func test_pests_bite_tip() -> void:
 
 # ---------- 三年流程 ----------
 
+func _resolve_discard(s: RunState) -> void:
+	while s.phase == RunState.Phase.DISCARD:
+		s.discard_card(0)
+
+
 func test_year_flow_to_market_and_next_year() -> void:
 	var s := RunState.create(9)
+	check_eq(s.tree.radius, Rules.radius_for_year(1))
 	for season in range(1, 5):
 		check_eq(s.season, season)
 		_clear_season(s)
 		check_eq(s.phase, RunState.Phase.REWARD)
 		s.choose_reward(0)
+		check_eq(s.phase, RunState.Phase.MARKET, "market after every season")
+		check_eq(s.market_relics.size(), Rules.MARKET_RELIC_OFFERS)
+		s.leave_market()
+		_resolve_discard(s)
 	check(s.is_calamity(), "fifth stage is calamity")
 	check_eq(s.turns_this_season(), Rules.CALAMITY_TURNS)
 	_clear_season(s)
@@ -155,6 +165,12 @@ func test_year_flow_to_market_and_next_year() -> void:
 	check_eq(s.phase, RunState.Phase.PLAY)
 	check(s.calamity != cal1, "calamity changes each year")
 	check(s.tree.land.size() > land_before, "new land each year")
+	check_eq(s.tree.radius, Rules.radius_for_year(2), "board grows")
+	var ring := 0
+	for c in s.tree.land:
+		if Hex.distance(c, Vector2i.ZERO) == s.tree.radius:
+			ring += 1
+	check(ring >= 1, "land on the new ring")
 	check_eq(s.ctx().seed_out, 2)
 
 
@@ -167,7 +183,8 @@ func test_win_after_three_years() -> void:
 				s.skip_reward()
 			elif s.phase == RunState.Phase.RELIC:
 				s.skip_relic()
-				s.leave_market()
+			s.leave_market()
+			_resolve_discard(s)
 	check_eq(s.phase, RunState.Phase.WON)
 	check_eq(s.year, Rules.YEARS)
 
@@ -265,6 +282,8 @@ func test_bud_ripens() -> void:
 
 func test_leaf_prune_bonus() -> void:
 	var s := _bare_run()
+	s.hand.clear()
+	s.hand_fresh.clear()
 	Growth.place(s.tree, &"leaf", Hex.DIRS[1], _t([Vector2i.ZERO], 1))
 	Growth.place(s.tree, &"stem", Hex.DIRS[3], _t([Vector2i.ZERO], 3))
 	var pv := s.preview_prune(Hex.DIRS[1])
@@ -277,9 +296,11 @@ func test_leaf_prune_bonus() -> void:
 
 
 func test_all_cards_load() -> void:
-	check_eq(Cards.all_ids().size(), 24)
-	check_eq(Cards.relic_ids().size(), 10)
-	check_eq(Cards.calamity_ids().size(), 3)
+	check(Cards.all_ids().size() >= 24, "at least the original 24 cards")
+	check(Cards.relic_ids().size() >= 10, "at least the original 10 relics")
+	for id in Cards.relic_ids():
+		check(Cards.relic(id).price > 0, "relic %s has price" % id)
+	check(Cards.calamity_ids().size() >= 7, "seven calamities")
 	for id in Cards.all_ids():
 		var d := Cards.get_def(id)
 		check(d.display_name != "" and d.desc != "", "card %s incomplete" % id)

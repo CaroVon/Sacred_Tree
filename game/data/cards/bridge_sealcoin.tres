@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="CardDef" format=3]
+
+[ext_resource type="Script" path="res://core/card_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"bridge_sealcoin"
+display_name = "封金匣"
+category = 2
+ports = PackedInt32Array()
+effect = 1
+value = 2.0
+color_key = &"seal"
+price = 4
+rarity = 1
+family = Array[StringName]([&"seal", &"coin"])
+keywords = Array[StringName]([&"store", &"sap"])
+desc = "+2，末端；自己的收获封存，季末释放；每次脉动得 1 养分"
+pulse_sap = 1
+seal_self = true

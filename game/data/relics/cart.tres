@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="RelicDef" format=3]
+
+[ext_resource type="Script" path="res://core/relic_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"cart"
+display_name = "手推车"
+desc = "每回合可以多移栽 1 次"
+price = 7
+family = &""

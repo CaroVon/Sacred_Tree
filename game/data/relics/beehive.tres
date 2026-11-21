@@ -7,3 +7,4 @@ script = ExtResource("1")
 id = &"beehive"
 display_name = "蜂箱"
 desc = "花、蜜花给相邻末梢的加成 +2"
+price = 7

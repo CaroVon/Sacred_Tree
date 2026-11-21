@@ -15,4 +15,4 @@ prune_value = 1
 color_key = &"pink"
 in_reward_pool = true
 desc = "+1，末端；相邻的其他末梢各 +3"
-price = 5
+price = 4

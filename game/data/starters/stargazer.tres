@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="StarterDef" format=3]
+
+[ext_resource type="Script" path="res://core/starter_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"stargazer"
+display_name = "观星者"
+desc = "星辰与镜像：看准回合时机，摆出对称。起手带星象仪。"
+deck = { &"stem": 3, &"fork": 2, &"star_sand": 2, &"star_tide": 1, &"star_meteor": 2, &"mirror_prism": 1, &"mirror_frame": 2, &"mirror_glass": 2, &"dead": 2 }
+relic = &"orrery"
+families = Array[StringName]([&"star", &"mirror"])
+order = 2

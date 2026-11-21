@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="RelicDef" format=3]
+
+[ext_resource type="Script" path="res://core/relic_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"timebox"
+display_name = "时光匣"
+desc = "提前收获时，剩余每回合都算作多封存一次"
+price = 9
+family = &"seal"

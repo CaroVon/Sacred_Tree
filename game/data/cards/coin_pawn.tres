@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="CardDef" format=3]
+
+[ext_resource type="Script" path="res://core/card_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"coin_pawn"
+display_name = "当铺"
+category = 2
+ports = PackedInt32Array()
+effect = 3
+value = 2.0
+color_key = &"coin"
+price = 4
+rarity = 1
+family = Array[StringName]([&"coin"])
+keywords = Array[StringName]([&"tip", &"sap"])
+desc = "×2，末端；被剪掉时额外得到它流出一半的养分"
+prune_out_sap = 0.5

@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="RelicDef" format=3]
+
+[ext_resource type="Script" path="res://core/relic_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"signet"
+display_name = "蜡印"
+desc = "封存释放时，每次封存的倍率再 +0.25"
+price = 7
+family = &"seal"

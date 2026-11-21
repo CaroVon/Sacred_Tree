@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="CardDef" format=3]
+
+[ext_resource type="Script" path="res://core/card_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"seal_break"
+display_name = "解印"
+category = 0
+ports = PackedInt32Array(0)
+effect = 1
+value = 1.0
+color_key = &"seal"
+price = 5
+rarity = 2
+family = Array[StringName]([&"seal"])
+keywords = Array[StringName]([&"conduct", &"store"])
+desc = "+1；被剪掉时立即释放牌桌上全部封存，再 ×2"
+release_on_prune = 2

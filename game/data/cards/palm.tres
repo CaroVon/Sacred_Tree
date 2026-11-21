@@ -11,5 +11,5 @@ ports = PackedInt32Array(-2, 0, 2)
 effect = 4
 value = 1.0
 color_key = &"blue"
-price = 6
+price = 4
 desc = "−1；向前和左右后方三个方向分枝"

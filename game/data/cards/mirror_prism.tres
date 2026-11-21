@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="CardDef" format=3]
+
+[ext_resource type="Script" path="res://core/card_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"mirror_prism"
+display_name = "棱镜"
+category = 1
+ports = PackedInt32Array(-2, 2)
+effect = 0
+value = 0.0
+color_key = &"mirror"
+price = 3
+rarity = 0
+family = Array[StringName]([&"mirror"])
+keywords = Array[StringName]([&"mirror"])
+desc = "向左右后方两个方向分枝，方便摆出对称的形状"

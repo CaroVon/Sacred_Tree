@@ -9,6 +9,9 @@ uniform float opacity = 0.95;
 uniform float ripple = 0.0;
 uniform float seed = 0.0;
 uniform vec4 season_tint : source_color = vec4(1.0, 1.0, 1.0, 1.0);
+// 新地块（矿脉/熔岩/星井/金沙）借用沃土纹理，再按流派色染色。
+uniform vec4 tint : source_color = vec4(1.0, 1.0, 1.0, 1.0);
+uniform float tint_amount = 0.0;
 
 float hash(vec2 p) {
 	p = fract(p * vec2(123.34, 456.21));
@@ -35,6 +38,7 @@ void fragment() {
 		uv += ripple * 0.012 * vec2(sin(TIME * 1.6 - d * 14.0), cos(TIME * 1.3 - d * 12.0));
 	}
 	vec4 t = texture(tex, uv);
-	ALBEDO = t.rgb * season_tint.rgb;
+	vec3 dyed = vec3(dot(t.rgb, vec3(0.333))) * tint.rgb * 1.6;
+	ALBEDO = mix(t.rgb, dyed, tint_amount) * season_tint.rgb;
 	ALPHA = m * opacity;
 }

@@ -11,6 +11,6 @@ ports = PackedInt32Array()
 effect = 3
 value = 2.0
 color_key = &"red"
-price = 6
+price = 4
 desc = "×2，末端；被剪掉时得 5 养分"
 prune_value = 5

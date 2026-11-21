@@ -20,6 +20,13 @@ const GOLD := Color("#B08A46")
 const TERRA := Color("#B04A2A")
 const STONE := Color("#8A8578")
 const WATER := Color("#6C8794")
+## 新流派的主题色。
+const STEEL := Color("#5E7381")    # 齿轮：钢蓝
+const EMBER := Color("#B4552F")    # 熔炉：赭红
+const ASTRAL := Color("#4D5683")   # 星辰：靛蓝
+const COIN := Color("#A6812F")     # 商会：金赭
+const MIRROR := Color("#7D8C99")   # 镜像：银灰
+const SEAL := Color("#7A4F6E")     # 封印：紫红
 
 ## 分类色键：green / blue / red / gold / pink / grey。
 const TITLE_FONT_PATH := "res://assets/fonts/ZCOOLXiaoWei-Regular.ttf"
@@ -51,7 +58,25 @@ static func card_color(key: StringName) -> Color:
 		&"gold": return GOLD
 		&"pink": return OCHRE
 		&"grey": return STONE
+		&"steel": return STEEL
+		&"ember": return EMBER
+		&"astral": return ASTRAL
+		&"coin": return COIN
+		&"mirror": return MIRROR
+		&"seal": return SEAL
 	return INK
+
+
+## 流派主题色（木用橄榄绿）。
+static func family_color(f: StringName) -> Color:
+	match f:
+		&"gear": return STEEL
+		&"forge": return EMBER
+		&"star": return ASTRAL
+		&"coin": return COIN
+		&"mirror": return MIRROR
+		&"seal": return SEAL
+	return OLIVE
 
 
 ## 器物 / 天灾 / 分类的强调色。

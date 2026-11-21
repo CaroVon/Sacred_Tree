@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="CardDef" format=3]
+
+[ext_resource type="Script" path="res://core/card_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"gear_cog"
+display_name = "齿轮"
+category = 0
+ports = PackedInt32Array(0)
+effect = 1
+value = 2.0
+color_key = &"steel"
+price = 3
+rarity = 0
+family = Array[StringName]([&"gear"])
+keywords = Array[StringName]([&"conduct", &"link"])
+desc = "+2；每个相邻的齿轮牌再 +2"
+adj_family_add = 2

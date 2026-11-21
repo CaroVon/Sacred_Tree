@@ -35,6 +35,8 @@ func _go() -> void:
 	root.content_scale_mode = Window.CONTENT_SCALE_MODE_CANVAS_ITEMS
 	root.content_scale_aspect = Window.CONTENT_SCALE_ASPECT_EXPAND
 	game = root.get_node("Game")
+	# 开发工具不碰玩家的收藏与解锁：用只在内存里的 profile
+	game.profile = Profile.load_from("")
 	game.reduce_motion = true
 	var save_before: bool = FileAccess.file_exists(game.SAVE_PATH)
 	var save_text: String = FileAccess.get_file_as_string(game.SAVE_PATH) if save_before else ""

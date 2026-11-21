@@ -1,5 +1,5 @@
 extends Control
-## 年度地图：整屏的 3D 牌桌上是神树现在的样子（器物立在两侧），
+## 年度地图：整屏的 3D 牌桌上是神树现在的样子（器物在上方装备槽），
 ## 右边一页纸写着这一年的年轮路径、本年天灾、牌组，从这里进入下一季。
 
 var run: RunState
@@ -20,7 +20,11 @@ func _ready() -> void:
 	add_child(board)
 	board.set_state(run.tree, run.preview(), {}, false, {})
 	board.set_mood(run.season, run.calamity)
-	board.set_relics.call_deferred(run.relics)
+	board.margins = Vector4(90, 150, PANEL_W + 90, 70)
+	var rb := RelicBar.new()
+	rb.position = Vector2(60, 24)
+	add_child(rb)
+	rb.set_relics(run.relics)
 
 	# ---------- 右页 ----------
 	var page := PrintBox.new()
@@ -101,10 +105,14 @@ func _ready() -> void:
 	var rel := "无" if run.relics.is_empty() else "、".join(run.relics.map(func(r): return "%s（%s）" % [Cards.relic(r).display_name, Cards.relic(r).desc]))
 	var counts := run.deck_counts()
 	var deck_parts: Array[String] = []
-	for id in Cards.all_ids():
-		if counts.has(id):
-			deck_parts.append("%s×%d" % [Cards.get_def(id).display_name, counts[id]])
+	var ids := counts.keys()
+	ids.sort()
+	for id in ids:
+		deck_parts.append("%s×%d" % [Cards.get_def(id).display_name, counts[id]])
 	info.text = "养分储备 %d\n器物：%s\n牌组（%d 张）：%s" % [run.sap, rel, run.deck.size() + run.discard.size() + run.hand.size(), "  ".join(deck_parts)]
+	if not Game.notices.is_empty():
+		info.text = "★ " + "\n★ ".join(Game.notices) + "\n\n" + info.text
+		Game.notices.clear()
 	col.add_child(info)
 
 	var spacer := Control.new()

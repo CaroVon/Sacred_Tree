@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="CardDef" format=3]
+
+[ext_resource type="Script" path="res://core/card_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"mirror_silver"
+display_name = "银镜"
+category = 0
+ports = PackedInt32Array(0)
+effect = 1
+value = 0.0
+color_key = &"mirror"
+price = 6
+rarity = 2
+family = Array[StringName]([&"mirror"])
+keywords = Array[StringName]([&"conduct", &"mirror"])
+desc = "流出至少是点对称位置那张牌流出的 2 倍（对面先放的才算）"
+mirror_copy = 2

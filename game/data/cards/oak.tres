@@ -11,6 +11,6 @@ ports = PackedInt32Array(0)
 effect = 1
 value = 8.0
 color_key = &"green"
-price = 6
+price = 4
 desc = "+8；只能接在深度 ≥3 的位置"
 min_depth = 3

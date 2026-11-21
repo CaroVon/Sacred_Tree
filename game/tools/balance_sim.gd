@@ -1,6 +1,7 @@
 extends SceneTree
 ## 平衡模拟：无头批量跑局，输出每季通过率与得分分布。
-## godot --headless --path game -s tools/balance_sim.gd -- <runs> <greedy|planner> <real|free> [seed_start] [out.csv]
+## godot --headless --path game -s tools/balance_sim.gd -- <runs> <greedy|planner> <real|free> [seed_start] [focus] [out.csv]
+##   focus：主流派（wood/gear/forge/...，或 any 表示不限）。
 ##   real：按真实目标，统计到达率、条件通过率、通关率。
 ##   free：忽略目标一路打完三年，统计每季得分的分位数（用来校准目标）。
 
@@ -11,14 +12,15 @@ func _initialize() -> void:
 	var policy := Bot.Policy.PLANNER if a.size() > 1 and a[1] == "planner" else Bot.Policy.GREEDY
 	var free := a.size() > 2 and a[2] == "free"
 	var seed0 := int(a[3]) if a.size() > 3 else 1
-	var out := a[4] if a.size() > 4 else ""
+	var focus: StringName = StringName(a[4]) if a.size() > 4 and a[4] != "any" else &""
+	var out := a[5] if a.size() > 5 else ""
 	var t0 := Time.get_ticks_msec()
-	var bot := Bot.make(policy)
+	var bot := Bot.make(policy, focus)
 	var results := []
 	for r in runs:
 		results.append(bot.run_game(seed0 + r, free))
 	var lines: Array[String] = []
-	lines.append("# %d 局，策略 %s，模式 %s，用时 %.1f 秒" % [runs, Bot.Policy.keys()[policy], "free" if free else "real", (Time.get_ticks_msec() - t0) / 1000.0])
+	lines.append("# %d 局，策略 %s，主流派 %s，模式 %s，用时 %.1f 秒" % [runs, Bot.Policy.keys()[policy], focus if focus != &"" else "any", "free" if free else "real", (Time.get_ticks_msec() - t0) / 1000.0])
 	if free:
 		lines.append("year,season,target,p10,p25,p50,p75,p90,share_ge_target")
 	else:

@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="CardDef" format=3]
+
+[ext_resource type="Script" path="res://core/card_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"bridge_mint"
+display_name = "铸币炉"
+category = 3
+ports = PackedInt32Array()
+effect = 0
+value = 0.0
+color_key = &"ember"
+price = 5
+rarity = 1
+family = Array[StringName]([&"forge", &"coin"])
+keywords = Array[StringName]([&"fuel", &"sap"])
+desc = "末端；牌桌上每燃烧一张牌，得 1 养分"
+sap_on_burn = 1

@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="CardDef" format=3]
+
+[ext_resource type="Script" path="res://core/card_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"bridge_spiritfruit"
+display_name = "灵果"
+category = 2
+ports = PackedInt32Array()
+effect = 3
+value = 2.0
+color_key = &"gold"
+price = 6
+rarity = 2
+family = Array[StringName]([&"wood", &"star"])
+keywords = Array[StringName]([&"tip", &"timing"])
+desc = "×2，末端；每次脉动倍率 +0.5（最多 ×4）；每季最后一回合再 ×2"
+mature_step = 0.5
+mature_cap = 2.0
+last_turn_mult = 2

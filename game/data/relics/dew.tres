@@ -7,3 +7,4 @@ script = ExtResource("1")
 id = &"dew"
 display_name = "露水瓶"
 desc = "每季第一次脉动 ×2"
+price = 9

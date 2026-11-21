@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="RelicDef" format=3]
+
+[ext_resource type="Script" path="res://core/relic_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"hourglass"
+display_name = "沙漏"
+desc = "四季每季多 1 回合（天灾季除外）"
+price = 10
+family = &"star"

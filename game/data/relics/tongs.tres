@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="RelicDef" format=3]
+
+[ext_resource type="Script" path="res://core/relic_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"tongs"
+display_name = "火钳"
+desc = "每季开始时火候 +5"
+price = 6
+family = &"forge"

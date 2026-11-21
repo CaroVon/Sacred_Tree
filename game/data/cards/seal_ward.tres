@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="CardDef" format=3]
+
+[ext_resource type="Script" path="res://core/card_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"seal_ward"
+display_name = "护符"
+category = 3
+ports = PackedInt32Array()
+effect = 0
+value = 0.0
+color_key = &"seal"
+price = 4
+rarity = 1
+family = Array[StringName]([&"seal"])
+keywords = Array[StringName]([&"store"])
+desc = "末端；相邻的牌视为坚韧（不枯萎，天灾伤不到）"
+aura_tough = true

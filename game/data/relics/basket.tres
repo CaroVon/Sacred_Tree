@@ -7,3 +7,4 @@ script = ExtResource("1")
 id = &"basket"
 display_name = "竹篮"
 desc = "手牌上限 +1"
+price = 8

@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="StarterDef" format=3]
+
+[ext_resource type="Script" path="res://core/starter_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"artisan"
+display_name = "工匠"
+desc = "齿轮与熔炉：拼集群、把牌烧成火候。起手带火钳。"
+deck = { &"stem": 3, &"fork": 2, &"gear_cog": 3, &"gear_rivet": 1, &"forge_coal": 2, &"forge_kindle": 1, &"fruit": 2, &"forge_ember": 1, &"dead": 2 }
+relic = &"tongs"
+families = Array[StringName]([&"gear", &"forge"])
+order = 1

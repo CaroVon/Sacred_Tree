@@ -2,6 +2,8 @@ extends Node
 ## 持有当前 RunState，负责场景切换与存档。场景之间不直接互相引用。
 
 const SAVE_PATH := "user://save.json"
+## 多局之间的收藏与解锁。
+const PROFILE_PATH := "user://profile.json"
 const SCENES := {
 	&"menu": "res://scenes/menu/menu.tscn",
 	&"season": "res://scenes/season/season.tscn",
@@ -14,6 +16,10 @@ const SETTINGS_PATH := "user://settings.cfg"
 const SFX := [&"place", &"prune", &"pulse", &"tip", &"click", &"win", &"lose"]
 
 var run: RunState
+## 收藏与解锁（流派、启程者、图鉴统计、联动谱）。
+var profile: Profile
+## 待显示的解锁 / 联动消息（下一个场景取走后清空）。
+var notices: Array[String] = []
 ## 设置：减少动效、音量（0..1）。
 var reduce_motion: bool = false
 ## 新手指导进行中（不存档）；以及是否完成过。
@@ -31,6 +37,7 @@ func _ready() -> void:
 	get_tree().root.theme = Palette.make_theme()
 	RenderingServer.set_default_clear_color(Palette.PAPER)
 	load_settings()
+	profile = Profile.load_from(PROFILE_PATH)
 	for id in SFX:
 		var path := "res://assets/sfx/%s.wav" % id
 		if ResourceLoader.exists(path):
@@ -149,9 +156,12 @@ func finish_tutorial() -> void:
 	run = load_save()
 
 
-func new_run(run_seed: int = -1) -> void:
+func new_run(run_seed: int = -1, starter: StringName = &"gardener") -> void:
 	tutorial = null
-	run = RunState.create(run_seed)
+	if not profile.has_starter(starter):
+		starter = &"gardener"
+	run = RunState.create(run_seed, starter, profile.families())
+	profile.record_run_start()
 	save()
 	goto(&"map")
 

@@ -15,4 +15,4 @@ prune_value = 1
 color_key = &"gold"
 in_reward_pool = true
 desc = "放在挨着 2 个以上末梢的空格，把它们嫁接起来，养分相乘"
-price = 7
+price = 5

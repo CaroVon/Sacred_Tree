@@ -17,4 +17,4 @@ in_reward_pool = true
 desc = "×3，末端；每次脉动后倍率 +0.5，最多 ×5"
 mature_step = 0.5
 mature_cap = 2.0
-price = 9
+price = 6

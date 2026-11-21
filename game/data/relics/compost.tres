@@ -7,3 +7,4 @@ script = ExtResource("1")
 id = &"compost"
 display_name = "堆肥桶"
 desc = "修剪时每张牌多得 1 养分"
+price = 6

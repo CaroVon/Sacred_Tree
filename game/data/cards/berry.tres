@@ -11,5 +11,5 @@ ports = PackedInt32Array()
 effect = 1
 value = 6.0
 color_key = &"red"
-price = 4
+price = 3
 desc = "+6，末端"

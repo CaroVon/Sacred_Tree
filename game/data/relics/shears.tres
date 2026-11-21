@@ -7,3 +7,4 @@ script = ExtResource("1")
 id = &"shears"
 display_name = "修枝剪"
 desc = "每回合可以修剪 2 次"
+price = 7

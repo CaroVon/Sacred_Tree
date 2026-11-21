@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="CardDef" format=3]
+
+[ext_resource type="Script" path="res://core/card_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"coin_copper"
+display_name = "铜币"
+category = 2
+ports = PackedInt32Array()
+effect = 1
+value = 3.0
+color_key = &"coin"
+price = 3
+rarity = 0
+family = Array[StringName]([&"coin"])
+keywords = Array[StringName]([&"tip", &"sap"])
+desc = "+3，末端；每次脉动得 1 养分"
+pulse_sap = 1

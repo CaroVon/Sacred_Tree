@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="CardDef" format=3]
+
+[ext_resource type="Script" path="res://core/card_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"mirror_glass"
+display_name = "镜面"
+category = 2
+ports = PackedInt32Array()
+effect = 1
+value = 3.0
+color_key = &"mirror"
+price = 2
+rarity = 0
+family = Array[StringName]([&"mirror"])
+keywords = Array[StringName]([&"tip", &"mirror"])
+desc = "+3，末端；便宜的对称材料"

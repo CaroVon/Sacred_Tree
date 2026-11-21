@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="CardDef" format=3]
+
+[ext_resource type="Script" path="res://core/card_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"seal_chain"
+display_name = "锁链"
+category = 1
+ports = PackedInt32Array(-1, 1)
+effect = 0
+value = 0.0
+color_key = &"seal"
+price = 3
+rarity = 0
+family = Array[StringName]([&"seal"])
+keywords = Array[StringName]([&"store"])
+desc = "向左右分枝；每次脉动给相邻封印牌的存量 +2"
+seal_feed = 2

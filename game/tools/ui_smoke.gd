@@ -19,6 +19,8 @@ func _settle() -> void:
 
 func _go(runs: int) -> void:
 	game = root.get_node("Game")
+	# 开发工具不碰玩家的收藏与解锁：用只在内存里的 profile
+	game.profile = Profile.load_from("")
 	# 默认关闭动画加速；传 anim 参数时保留动画以覆盖动画路径
 	game.reduce_motion = not OS.get_cmdline_user_args().has("anim")
 	var summary := []
@@ -63,7 +65,27 @@ func _play_season_step(sc) -> void:
 			return
 		RunState.Phase.RELIC:
 			sc._choose_relic(0)
+			if s.phase == RunState.Phase.RELIC:
+				sc._replace_relic(0, 0)
 			return
+		RunState.Phase.DISCARD:
+			sc._select(0)
+			return
+	if s.can_harvest() and s.turn >= 3:
+		sc._harvest()
+		return
+	# 每季第 2 回合试一次移栽
+	if s.turn == 2 and s.can_transplant() and s.tree.size() > 2:
+		for n: TreeNode in s.tree.sorted():
+			var tg := s.transplant_targets(n.key)
+			if not tg.is_empty():
+				sc._toggle_transplant()
+				sc._on_cell_hovered(n.key)
+				sc._on_cell_clicked(n.key)
+				var to: Vector2i = tg.keys()[0]
+				sc._on_cell_hovered(to)
+				sc._on_cell_clicked(to)
+				break
 	if not _any_play(s) and s.can_prune() and s.tree.size() > 3:
 		var k: Vector2i = s.tree.sorted()[-1].key
 		sc._toggle_prune()
@@ -97,7 +119,17 @@ func _shop(sc) -> void:
 	var s: RunState = game.run
 	s.sap += 40  # 让集市的每条路径都被走到
 	sc._buy(0)
+	sc._buy_relic(0)
+	if s.relics.size() > 3:
+		sc._sell_relic(0)
 	sc._remove(&"dead")
+	for n: TreeNode in s.tree.sorted():
+		if not n.is_seed() and not Growth.free_port_dirs(n).is_empty():
+			sc._start_pick(sc.Pick.PORT, &"")
+			sc._on_cell(n.key)
+			var d: int = Growth.free_port_dirs(n)[0]
+			sc._on_cell(n.key + Hex.DIRS[d])
+			break
 	var tip := s.tree.sorted()[-1].key
 	sc._start_pick(sc.Pick.MARK, &"tough")
 	sc._on_cell(tip)

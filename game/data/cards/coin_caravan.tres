@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="CardDef" format=3]
+
+[ext_resource type="Script" path="res://core/card_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"coin_caravan"
+display_name = "驼队"
+category = 1
+ports = PackedInt32Array(-1, 0, 1)
+effect = 0
+value = 0.0
+color_key = &"coin"
+price = 3
+rarity = 0
+family = Array[StringName]([&"coin"])
+keywords = Array[StringName]([&"sap"])
+desc = "向三个方向分枝且不减值；放下时花 3 养分"
+play_cost = 3

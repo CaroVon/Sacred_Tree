@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="CardDef" format=3]
+
+[ext_resource type="Script" path="res://core/card_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"gear_diff"
+display_name = "差速器"
+category = 1
+ports = PackedInt32Array(-1, 1)
+effect = 0
+value = 0.0
+color_key = &"steel"
+price = 4
+rarity = 0
+family = Array[StringName]([&"gear"])
+keywords = Array[StringName]([&"link"])
+desc = "向左右分枝；每个相邻的齿轮牌 +1"
+adj_family_add = 1

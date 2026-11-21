@@ -11,6 +11,6 @@ ports = PackedInt32Array()
 effect = 5
 value = 3.0
 color_key = &"gold"
-price = 6
+price = 4
 desc = "放在挨着 2 个以上末梢的空格，把它们嫁接起来，养分相加 ×3"
 graft_sum = true

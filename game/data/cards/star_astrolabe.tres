@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="CardDef" format=3]
+
+[ext_resource type="Script" path="res://core/card_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"star_astrolabe"
+display_name = "星盘"
+category = 1
+ports = PackedInt32Array(-1, 0, 1)
+effect = 4
+value = 1.0
+color_key = &"astral"
+price = 3
+rarity = 0
+family = Array[StringName]([&"star"])
+keywords = Array[StringName]([&"timing"])
+desc = "−1，向前与左右三个方向分枝；星辰牌排成直线 3 张以上成「连星」，流出 ×2"

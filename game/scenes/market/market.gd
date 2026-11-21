@@ -1,24 +1,29 @@
 extends Control
-## 集市：用养分购买牌、年轮印记、地块改造和删牌服务，然后进入下一年。
+## 集市：每季结束后开放。用养分购买牌、器物、年轮印记、芽点、地块改造和删牌服务。
+## 器物装在屏幕上方的装备槽里，右键可出售。
 
-enum Pick { NONE, MARK, CLEAR_ROCK, FERTILE }
+enum Pick { NONE, MARK, CLEAR_ROCK, FERTILE, PORT }
 
 var run: RunState
 var pick: Pick = Pick.NONE
 var pick_mark: StringName = &""
+## 芽点服务：已选中的牌（NO_CELL = 还没选）。
+var port_from: Vector2i = BoardView.NO_CELL
 
 var board: BoardView
 var hint: Label
 var relic_bar: RelicBar
 var lbl_sap: Label
 var offers: HFlowContainer
+var relic_offers: HFlowContainer
 var services: VBoxContainer
 var deck_box: HFlowContainer
+var refine_box: HFlowContainer
 
 
 const PANEL_W := 900.0
-const OFFER_W := 172.0
-const OFFER_H := 292.0
+const OFFER_W := 150.0
+const OFFER_H := 255.0
 
 var deck_pile: PileView
 var fly_layer: Control
@@ -35,14 +40,20 @@ func _ready() -> void:
 	# ---------- 整屏牌桌（器物立在两侧） ----------
 	board = Board3D.new()
 	board.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	board.margins = Vector4(70, 110, PANEL_W + 80, 200)
+	board.margins = Vector4(70, 190, PANEL_W + 80, 200)
 	board.show_buds = false
 	board.ctx = run.ctx()
 	board.cell_clicked.connect(_on_cell)
 	board.cell_hovered.connect(_on_hover)
 	add_child(board)
 	board.set_mood(run.season, &"")
-	board.set_relics.call_deferred(run.relics)
+
+	# 上方：装备槽（右键出售）
+	relic_bar = RelicBar.new()
+	relic_bar.sell_price = run.relic_sell_price
+	relic_bar.sell_mode = true
+	relic_bar.sell_requested.connect(_sell_relic)
+	add_child(relic_bar)
 
 	# 左上：题名 + 提示丝带
 	var tl := VBoxContainer.new()
@@ -58,6 +69,10 @@ func _ready() -> void:
 	title.add_theme_color_override("font_outline_color", Color(Palette.INK, 0.85))
 	title.add_theme_constant_override("outline_size", 10)
 	tl.add_child(title)
+	var gap := Control.new()
+	gap.custom_minimum_size = Vector2(0, 30)
+	gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tl.add_child(gap)
 	var hb := PanelContainer.new()
 	var hsb := StyleBoxFlat.new()
 	hsb.bg_color = Color(Palette.SHEET, 0.92)
@@ -86,6 +101,7 @@ func _ready() -> void:
 	deck_pile.offset_left = 40
 	deck_pile.offset_bottom = -22
 	add_child(deck_pile)
+	relic_bar.position = Vector2(250, 16)
 
 	# ---------- 右边：摊位 ----------
 	var page := PrintBox.new()
@@ -99,11 +115,19 @@ func _ready() -> void:
 	page.offset_top = 26
 	page.offset_bottom = -26
 	add_child(page)
+	var outer := VBoxContainer.new()
+	outer.add_theme_constant_override("separation", 10)
+	page.add_child(outer)
+	var head := HBoxContainer.new()
+	outer.add_child(head)
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	outer.add_child(scroll)
 	var right := VBoxContainer.new()
 	right.add_theme_constant_override("separation", 10)
-	page.add_child(right)
-	var head := HBoxContainer.new()
-	right.add_child(head)
+	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(right)
 	var stall := Label.new()
 	stall.text = "摊位"
 	stall.theme_type_variation = &"SubtitleLabel"
@@ -142,29 +166,39 @@ func _ready() -> void:
 		shelf.draw_rect(Rect2(0, y + 14, shelf.size.x, 5), Color(Palette.INK, 0.18)))
 	right.add_child(shelf)
 	offers = HFlowContainer.new()
-	offers.add_theme_constant_override("h_separation", 22)
+	offers.add_theme_constant_override("h_separation", 14)
 	offers.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	offers.offset_left = 8
+	offers.offset_left = 4
 	shelf.add_child(offers)
-	right.add_child(_heading("年轮印记与土地"))
+	right.add_child(_heading("器物（装备槽 %d 格，右键槽位可出售）" % Rules.RELIC_SLOTS))
+	relic_offers = HFlowContainer.new()
+	relic_offers.add_theme_constant_override("h_separation", 14)
+	relic_offers.add_theme_constant_override("v_separation", 10)
+	right.add_child(relic_offers)
+	right.add_child(_heading("年轮、芽点与土地"))
 	services = VBoxContainer.new()
 	services.add_theme_constant_override("separation", 6)
 	right.add_child(services)
-	right.add_child(_heading("删牌（每张 %d 养分）" % Rules.REMOVE_CARD_PRICE))
+	right.add_child(_heading("删牌（每张 %d 养分）" % run.service_price(Rules.REMOVE_CARD_PRICE)))
 	deck_box = HFlowContainer.new()
 	deck_box.add_theme_constant_override("h_separation", 8)
 	deck_box.add_theme_constant_override("v_separation", 8)
 	right.add_child(deck_box)
-	var spacer := Control.new()
-	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	right.add_child(spacer)
+	right.add_child(_heading("精炼（每张 %d 养分，每张牌只能精炼一次）" % run.service_price(Rules.REFINE_PRICE)))
+	refine_box = HFlowContainer.new()
+	refine_box.add_theme_constant_override("h_separation", 8)
+	refine_box.add_theme_constant_override("v_separation", 8)
+	right.add_child(refine_box)
 	var leave := Button.new()
-	leave.text = "离开集市，进入第%d年" % (run.year + 1)
+	if run.is_calamity():
+		leave.text = "离开集市，进入第%d年（牌桌外扩一圈）" % (run.year + 1)
+	else:
+		leave.text = "离开集市，进入%s季" % Rules.season_name(run.season + 1)
 	leave.theme_type_variation = &"PrimaryButton"
 	leave.add_theme_font_size_override("font_size", 24)
 	leave.custom_minimum_size = Vector2(0, 58)
 	leave.pressed.connect(_leave)
-	right.add_child(leave)
+	outer.add_child(leave)
 
 	fly_layer = Control.new()
 	fly_layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -204,6 +238,17 @@ func _refresh() -> void:
 					tg[c] = true
 				elif run.can_make_fertile(c):
 					np[c] = true
+			Pick.PORT:
+				var n := run.tree.at(c)
+				if port_from == BoardView.NO_CELL and n != null and not n.is_seed() \
+						and n.extra_ports.size() < Rules.MAX_EXTRA_PORTS and not Growth.free_port_dirs(n).is_empty():
+					np[c] = true
+	if pick == Pick.PORT and port_from != BoardView.NO_CELL:
+		np[port_from] = true
+		for d in Growth.free_port_dirs(run.tree.at(port_from)):
+			var c: Vector2i = port_from + Hex.DIRS[d]
+			if Hex.in_board(c, run.tree.radius):
+				tg[c] = true
 	board.node_pick = np
 	board.set_state(run.tree, run.preview(), tg, false, {})
 
@@ -225,26 +270,49 @@ func _refresh() -> void:
 		l.theme_type_variation = &"SoftLabel"
 		offers.add_child(l)
 
+	for ch in relic_offers.get_children():
+		ch.queue_free()
+	for i in run.market_relics.size():
+		relic_offers.add_child(_relic_offer(i))
+	if run.market_relics.is_empty():
+		var l := Label.new()
+		l.text = "没有器物了。"
+		l.theme_type_variation = &"SoftLabel"
+		relic_offers.add_child(l)
+
 	for ch in services.get_children():
 		ch.queue_free()
 	for m in Rules.MARKS:
 		var info: Dictionary = Rules.MARKS[m]
-		_service("年轮「%s」（%d）：%s" % [info.name, info.price, info.desc], run.sap >= int(info.price),
+		var mp := run.service_price(int(info.price))
+		_service("年轮「%s」（%d）：%s" % [info.name, mp, info.desc], run.sap >= mp,
 			pick == Pick.MARK and pick_mark == m, _start_pick.bind(Pick.MARK, m))
-	_service("清除岩石（%d）：把一块岩石变回平地" % Rules.CLEAR_ROCK_PRICE, run.sap >= Rules.CLEAR_ROCK_PRICE,
+	_service("芽点（%d）：选一张牌，再选一个方向，给它多加一个芽点（每张最多 %d 个）" % [run.service_price(Rules.PORT_PRICE), Rules.MAX_EXTRA_PORTS],
+		run.sap >= run.service_price(Rules.PORT_PRICE), pick == Pick.PORT, _start_pick.bind(Pick.PORT, &""))
+	_service("清除岩石（%d）：把一块岩石变回平地" % run.service_price(Rules.CLEAR_ROCK_PRICE), run.sap >= run.service_price(Rules.CLEAR_ROCK_PRICE),
 		pick == Pick.CLEAR_ROCK, _start_pick.bind(Pick.CLEAR_ROCK, &""))
-	_service("养成沃土（%d）：%s" % [Rules.MAKE_FERTILE_PRICE, Land.desc_of(Land.Type.FERTILE)], run.sap >= Rules.MAKE_FERTILE_PRICE,
+	_service("养成沃土（%d）：%s" % [run.service_price(Rules.MAKE_FERTILE_PRICE), Land.desc_of(Land.Type.FERTILE)], run.sap >= run.service_price(Rules.MAKE_FERTILE_PRICE),
 		pick == Pick.FERTILE, _start_pick.bind(Pick.FERTILE, &""))
 
 	for ch in deck_box.get_children():
 		ch.queue_free()
 	var counts := run.deck_counts()
-	for id in Cards.all_ids():
-		if not counts.has(id):
-			continue
+	var ids := counts.keys()
+	ids.sort()
+	for ch in refine_box.get_children():
+		ch.queue_free()
+	for id in ids:
+		if not Cards.get_def(id).is_plus():
+			var plus := Cards.get_def(StringName(String(id) + "+"))
+			var rb := Button.new()
+			rb.text = "%s → %s" % [Cards.get_def(id).display_name, plus.display_name]
+			rb.disabled = not run.can_refine(id)
+			rb.tooltip_text = plus.desc
+			rb.pressed.connect(_refine.bind(id))
+			refine_box.add_child(rb)
 		var b := Button.new()
 		b.text = "%s ×%d" % [Cards.get_def(id).display_name, counts[id]]
-		b.disabled = run.sap < Rules.REMOVE_CARD_PRICE
+		b.disabled = run.sap < run.service_price(Rules.REMOVE_CARD_PRICE)
 		b.tooltip_text = Cards.get_def(id).desc
 		b.pressed.connect(_remove.bind(id))
 		deck_box.add_child(b)
@@ -256,8 +324,72 @@ func _refresh() -> void:
 			hint.text = "点一块岩石把它清除。"
 		Pick.FERTILE:
 			hint.text = "点一块平地（可以已经长了牌）把它养成沃土。"
+		Pick.PORT:
+			if port_from == BoardView.NO_CELL:
+				hint.text = "芽点：先点一张树上的牌。"
+			else:
+				hint.text = "芽点：点%s周围点亮的一格，芽点就朝那个方向（再点这张牌换一张）。" % Cards.get_def(run.tree.at(port_from).type).display_name
 		_:
-			hint.text = "神树带着现在的形状进入下一年。把鼠标移到格子上查看地块。"
+			hint.text = "神树带着现在的形状进入下一季。把鼠标移到格子上查看地块；滚轮缩放，右键拖动平移。"
+
+
+## 器物摊位：一幅器物版画 + 名字、说明、价格。
+func _relic_offer(i: int) -> Button:
+	var rid := run.market_relics[i]
+	var r := Cards.relic(rid)
+	var btn := Button.new()
+	btn.custom_minimum_size = Vector2(408, 104)
+	btn.disabled = not run.can_buy_relic(i)
+	btn.tooltip_text = "装备槽已满：先在下方右键出售一件" if run.relics_full() else ""
+	var row := HBoxContainer.new()
+	row.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	row.offset_left = 10
+	row.offset_right = -10
+	row.offset_top = 6
+	row.offset_bottom = -6
+	row.add_theme_constant_override("separation", 10)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	btn.add_child(row)
+	var art := ArtView.new()
+	var cut := StringName("relic_cut_" + String(rid))
+	art.art_id = cut if CardArt.has(cut) else rid
+	art.mode = 1
+	art.custom_minimum_size = Vector2(80, 80)
+	art.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(art)
+	var col := VBoxContainer.new()
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(col)
+	var n := Label.new()
+	n.text = "%s　%d 养分" % [r.display_name, r.price]
+	n.theme_type_variation = &"TitleLabel"
+	n.add_theme_font_size_override("font_size", 20)
+	n.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_child(n)
+	var d := Label.new()
+	d.text = r.desc
+	d.theme_type_variation = &"SoftLabel"
+	d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	d.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_child(d)
+	btn.pressed.connect(_buy_relic.bind(i))
+	return btn
+
+
+func _buy_relic(i: int) -> void:
+	if run.buy_relic(i):
+		Game.sfx(&"place", 1.2)
+		Game.save()
+		_refresh()
+
+
+func _sell_relic(i: int) -> void:
+	if run.sell_relic(i):
+		Game.sfx(&"prune", 1.1)
+		Game.save()
+		_refresh()
 
 
 func _service(text: String, enabled: bool, active: bool, fn: Callable) -> void:
@@ -271,6 +403,7 @@ func _service(text: String, enabled: bool, active: bool, fn: Callable) -> void:
 
 
 func _start_pick(mode: Pick, mark: StringName) -> void:
+	port_from = BoardView.NO_CELL
 	if pick == mode and pick_mark == mark:
 		pick = Pick.NONE
 	else:
@@ -288,6 +421,19 @@ func _on_cell(c: Vector2i) -> void:
 			ok = run.clear_rock(c)
 		Pick.FERTILE:
 			ok = run.make_fertile(c)
+		Pick.PORT:
+			if port_from == BoardView.NO_CELL or c == port_from:
+				var n := run.tree.at(c)
+				if c == port_from:
+					port_from = BoardView.NO_CELL
+				elif n and not n.is_seed() and not Growth.free_port_dirs(n).is_empty() and n.extra_ports.size() < Rules.MAX_EXTRA_PORTS:
+					port_from = c
+				_refresh()
+				return
+			var d := Hex.dir_between(port_from, c)
+			ok = d >= 0 and run.add_port(port_from, d)
+			if ok:
+				port_from = BoardView.NO_CELL
 	if ok:
 		pick = Pick.NONE
 		Game.save()
@@ -361,6 +507,13 @@ func _punch(c: Control) -> void:
 	tw.tween_property(c, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 
+func _refine(id: StringName) -> void:
+	if run.refine(id):
+		Game.sfx(&"place", 1.3)
+		Game.save()
+		_refresh()
+
+
 func _remove(id: StringName) -> void:
 	if run.remove_card(id):
 		Game.save()
@@ -369,6 +522,7 @@ func _remove(id: StringName) -> void:
 
 func _leave() -> void:
 	run.leave_market()
+	Game.notices.append_array(Game.profile.record_progress(run))
 	Game.save()
 	Game.goto(&"map")
 
@@ -376,5 +530,6 @@ func _leave() -> void:
 func _unhandled_input(e: InputEvent) -> void:
 	if e is InputEventKey and e.pressed and e.keycode == KEY_ESCAPE and pick != Pick.NONE:
 		pick = Pick.NONE
+		port_from = BoardView.NO_CELL
 		_refresh()
 		get_viewport().set_input_as_handled()

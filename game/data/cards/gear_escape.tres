@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="CardDef" format=3]
+
+[ext_resource type="Script" path="res://core/card_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"gear_escape"
+display_name = "擒纵"
+category = 3
+ports = PackedInt32Array()
+effect = 0
+value = 0.0
+color_key = &"steel"
+price = 4
+rarity = 1
+family = Array[StringName]([&"gear"])
+keywords = Array[StringName]([&"tip"])
+desc = "末端，不加值；相邻其他末梢的收获 ×1.5"
+aura_tip_mul = 0.5

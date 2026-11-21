@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="CardDef" format=3]
+
+[ext_resource type="Script" path="res://core/card_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"gear_rivet"
+display_name = "铆钉"
+category = 0
+ports = PackedInt32Array(0)
+effect = 1
+value = 1.0
+color_key = &"steel"
+price = 2
+rarity = 0
+family = Array[StringName]([&"gear"])
+keywords = Array[StringName]([&"conduct"])
+desc = "+1；天生坚韧（不枯萎，天灾伤不到）"
+innate_tough = true

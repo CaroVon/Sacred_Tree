@@ -33,7 +33,6 @@ func _ready() -> void:
 	board.ctx = _run.ctx()
 	add_child(board)
 	board.set_mood(_run.season if _run.season <= 4 else 1, &"")
-	board.set_relics.call_deferred(_run.relics)
 	_shown = 0 if not Game.reduce_motion else _order.size()
 	_show_partial()
 	set_process(true)
@@ -87,7 +86,7 @@ func _ready() -> void:
 		bc.pressed.connect(Game.continue_run)
 		first = bc
 	var bn := _btn(v, "新的一局", not Game.has_save())
-	bn.pressed.connect(func(): Game.new_run())
+	bn.pressed.connect(_pick_starter)
 	if first == null:
 		first = bn
 	var bt := _btn(v, "新手指导" + ("" if Game.tutorial_done else "（推荐第一次玩先看）"), false)
@@ -159,6 +158,105 @@ func _show_partial() -> void:
 	var upto := _order[_shown - 1].order if _shown > 0 else -1
 	var t := Showcase.partial(_tree, upto) if _shown < _order.size() else _tree
 	board.set_state(t, _run.explained(t), {}, false, {})
+
+
+## 开新局前选启程者：已解锁的可选，未解锁的写出解锁条件。
+func _pick_starter() -> void:
+	var veil := ColorRect.new()
+	veil.color = Color(Palette.INK, 0.55)
+	veil.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	veil.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(veil)
+	var page := PrintBox.new()
+	page.padding = 30
+	page.inner_border = true
+	page.shadow_offset = Vector2(8, 10)
+	page.shadow_color = Color(Palette.INK, 0.45)
+	page.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	page.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	page.grow_vertical = Control.GROW_DIRECTION_BOTH
+	veil.add_child(page)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 16)
+	page.add_child(col)
+	var t := Label.new()
+	t.text = "选择启程者"
+	t.theme_type_variation = &"TitleLabel"
+	t.add_theme_font_size_override("font_size", 40)
+	col.add_child(t)
+	var sub := Label.new()
+	sub.text = "启程者决定你的起手牌组和一件起手器物。之后的选牌、集市和事件仍然可以把牌组带向任何方向。"
+	sub.theme_type_variation = &"SoftLabel"
+	sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	sub.custom_minimum_size = Vector2(1120, 0)
+	col.add_child(sub)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 16)
+	col.add_child(row)
+	var first: Button = null
+	var ids := Cards.starter_ids()
+	ids.sort_custom(func(a, b): return Cards.starter(a).order < Cards.starter(b).order)
+	for id in ids:
+		var st := Cards.starter(id)
+		var open := Game.profile.has_starter(id)
+		var b := Button.new()
+		b.custom_minimum_size = Vector2(270, 300)
+		b.disabled = not open
+		b.clip_text = true
+		var v := VBoxContainer.new()
+		v.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		v.offset_left = 14
+		v.offset_right = -14
+		v.offset_top = 12
+		v.offset_bottom = -12
+		v.add_theme_constant_override("separation", 6)
+		v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		b.add_child(v)
+		var art := ArtView.new()
+		art.mode = 1
+		art.art_id = StringName("relic_cut_" + String(st.relic)) if st.relic != &"" and CardArt.has(StringName("relic_cut_" + String(st.relic))) else &"tree"
+		art.custom_minimum_size = Vector2(0, 90)
+		v.add_child(art)
+		var n := Label.new()
+		n.text = st.display_name
+		n.theme_type_variation = &"TitleLabel"
+		n.add_theme_font_size_override("font_size", 26)
+		n.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		v.add_child(n)
+		var fam := Label.new()
+		fam.text = " · ".join(st.families.map(func(f): return CardDef.FAMILY_NAMES.get(f, String(f))))
+		fam.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		fam.add_theme_color_override("font_color", Palette.family_color(st.families[0]) if not st.families.is_empty() else Palette.OLIVE)
+		v.add_child(fam)
+		var d := Label.new()
+		d.text = st.desc if open else "未解锁：" + Game.profile.unlock_hint_starter(id)
+		d.theme_type_variation = &"SoftLabel"
+		d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		d.add_theme_font_size_override("font_size", 15)
+		v.add_child(d)
+		for ch in v.get_children():
+			ch.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		b.pressed.connect(func(): Game.new_run(-1, id))
+		row.add_child(b)
+		if open and first == null:
+			first = b
+	var fams := Label.new()
+	var locked: Array[String] = []
+	for f in CardDef.FAMILY_NAMES:
+		if not Game.profile.has_family(f):
+			locked.append("%s（%s）" % [CardDef.FAMILY_NAMES[f], Game.profile.unlock_hint_family(f)])
+	fams.text = "未解锁的流派不会出现在选牌和集市里：" + "、".join(locked) if not locked.is_empty() else "所有流派都已解锁。"
+	fams.theme_type_variation = &"SoftLabel"
+	fams.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	fams.custom_minimum_size = Vector2(1120, 0)
+	col.add_child(fams)
+	var back := Button.new()
+	back.text = "返回"
+	back.size_flags_horizontal = Control.SIZE_SHRINK_END
+	back.pressed.connect(veil.queue_free)
+	col.add_child(back)
+	if first:
+		first.grab_focus.call_deferred()
 
 
 func _gold_rule() -> Control:

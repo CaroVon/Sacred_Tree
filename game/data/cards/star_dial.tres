@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="CardDef" format=3]
+
+[ext_resource type="Script" path="res://core/card_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"star_dial"
+display_name = "日晷"
+category = 0
+ports = PackedInt32Array(0)
+effect = 3
+value = 1.0
+color_key = &"astral"
+price = 4
+rarity = 0
+family = Array[StringName]([&"star"])
+keywords = Array[StringName]([&"conduct", &"timing"])
+desc = "×季节序号（春 1、夏 2、秋 3、冬与天灾 4）"
+season_mul = true

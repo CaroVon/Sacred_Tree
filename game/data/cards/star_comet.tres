@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="CardDef" format=3]
+
+[ext_resource type="Script" path="res://core/card_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"star_comet"
+display_name = "彗尾"
+category = 2
+ports = PackedInt32Array()
+effect = 1
+value = 3.0
+color_key = &"astral"
+price = 4
+rarity = 1
+family = Array[StringName]([&"star"])
+keywords = Array[StringName]([&"tip"])
+desc = "+3，末端；计算长茎时深度 +3"
+depth_bonus = 3

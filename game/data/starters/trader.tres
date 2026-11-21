@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="StarterDef" format=3]
+
+[ext_resource type="Script" path="res://core/starter_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"trader"
+display_name = "旅商"
+desc = "商会与封印：攒养分、攒封存，留到季末一次兑现。起手带存钱罐。"
+deck = { &"stem": 3, &"fork": 2, &"coin_copper": 3, &"coin_caravan": 1, &"seal_wax": 2, &"seal_rune": 1, &"fruit": 2, &"dead": 2 }
+relic = &"piggy"
+families = Array[StringName]([&"coin", &"seal"])
+order = 3

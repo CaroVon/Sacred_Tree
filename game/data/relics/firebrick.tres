@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="RelicDef" format=3]
+
+[ext_resource type="Script" path="res://core/relic_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"firebrick"
+display_name = "耐火砖"
+desc = "熔炉牌都视为坚韧"
+price = 8
+family = &"forge"

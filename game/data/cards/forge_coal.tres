@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="CardDef" format=3]
+
+[ext_resource type="Script" path="res://core/card_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"forge_coal"
+display_name = "炭"
+category = 0
+ports = PackedInt32Array(0)
+effect = 1
+value = 2.0
+color_key = &"ember"
+price = 2
+rarity = 0
+family = Array[StringName]([&"forge"])
+keywords = Array[StringName]([&"conduct", &"fuel"])
+desc = "+2；燃烧（离开牌桌）时火候额外 +3"
+heat_on_burn = 3

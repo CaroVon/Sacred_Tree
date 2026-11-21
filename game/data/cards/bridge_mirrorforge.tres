@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="CardDef" format=3]
+
+[ext_resource type="Script" path="res://core/card_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"bridge_mirrorforge"
+display_name = "镜炉"
+category = 0
+ports = PackedInt32Array(0)
+effect = 3
+value = 1.0
+color_key = &"mirror"
+price = 6
+rarity = 2
+family = Array[StringName]([&"mirror", &"forge"])
+keywords = Array[StringName]([&"fuel", &"mirror"])
+desc = "×(1 + 0.1×火候)；对称位置也是镜炉时再 ×2"
+heat_mul = 0.1
+mirror_same_mult = 2

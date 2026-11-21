@@ -4,6 +4,9 @@ extends Control
 var run: RunState
 var sel: int = -1
 var prune_mode: bool = false
+## 移栽模式：先点要挪的牌（transplant_from），再点新位置。
+var transplant_mode: bool = false
+var transplant_from: Vector2i = BoardView.NO_CELL
 var flash: Dictionary = {}
 var _hand_sig: String = ""
 
@@ -36,9 +39,13 @@ var lbl_pulse: Label
 var lbl_sap: Label
 var lbl_piles: Label
 var lbl_acts: Label
+var lbl_heat: Label
+var lbl_res: Label
 var b_end: SealButton
 var b_prune: Button
 var b_redraw: Button
+var b_harvest: Button
+var b_transplant: Button
 var log_box: VBoxContainer
 ## 器物栏（顶栏里的一排器物图标）。
 var relic_bar: RelicBar
@@ -148,7 +155,14 @@ func _build() -> void:
 	bar.add_theme_stylebox_override("fill", fg)
 	sv.add_child(bar)
 	lbl_sap = _row(sv, "养分储备", "")[1]
-	lbl_acts = _row(sv, "本回合可放 / 可剪", "")[1]
+	lbl_acts = _row(sv, "可放 / 剪 / 移栽", "")[1]
+	var heat_row := _row(sv, "火候 / 已燃烧", "")
+	lbl_heat = heat_row[1]
+	lbl_res = Label.new()
+	lbl_res.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	lbl_res.add_theme_font_size_override("font_size", 15)
+	lbl_res.mouse_filter = Control.MOUSE_FILTER_PASS
+	sv.add_child(lbl_res)
 	# 牌库/弃牌和器物已经有实物显示，这两行文字隐藏
 	var piles_row := _row(sv, "牌库 / 弃牌", "")
 	lbl_piles = piles_row[1]
@@ -255,7 +269,16 @@ func _build() -> void:
 	rl.add_theme_color_override("font_color", Palette.INK)
 	rl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	rl.custom_minimum_size = Vector2(420, 0)
-	rl.text = "· 树心每次脉动输出：春 1、夏 2、秋 4、冬 8。\n· 选一张手牌（或拖到牌桌），虚线格就是可以接上的位置。每回合最多放 %d 张。\n· 养分沿枝干流动，遇到分叉就复制；所有末梢相加就是得分。\n· 花给相邻的其他末梢加养分；藤把挨着的末梢嫁接起来，养分相乘。\n· 修剪剪掉一张牌和它后面的所有枝，每回合限 %d 次。\n· 牌型：长茎（末梢深度 ≥6）该末梢 ×2；星芒（一张牌长出 3 条子枝）流出 ×2；闭环（藤的父牌同源）×2；对称 总分 ×1.5。\n· 快捷键：1–5 选牌，空格脉动，P 修剪，R 重抽，按住 Tab 图解，L 记录，H 规则，Esc 取消。" % [Rules.PLAYS, Rules.PRUNES]
+	rl.text = "· 树心每次脉动输出：春 1、夏 2、秋 4、冬 8（第 y 年再 ×y）。
+· 选一张手牌（或拖到牌桌），虚线格就是可以接上的位置。每回合最多放 %d 张。
+· 养分沿枝干流动，遇到分叉就复制；所有末梢相加就是得分。
+· 花给相邻的其他末梢加养分；藤把挨着的末梢嫁接起来，养分相乘。
+· 修剪剪掉一张牌和它后面的所有枝（每回合 %d 次），剪下的牌回到手牌，下回合可再打出；手牌超过上限要弃牌。
+· 移栽把一张牌连同后面的枝整体挪到别的芽点（每回合 %d 次），成熟度保留。
+· 本季累计达标后可以提前收获，剩余每回合得 %d 养分。每季结束都会进集市。
+· 牌型：长茎（末梢深度 ≥6）该末梢 ×2；星芒（一张牌长出 3 条子枝）流出 ×2；闭环（藤的父牌同源）×2；对称 总分 ×1.5。
+· 牌桌：滚轮或触控板捏合缩放，右键拖动平移，双击右键或 F 复位。牌桌每年外扩一圈。
+· 快捷键：1–9 选牌，空格脉动，G 收获，P 修剪，T 移栽，R 重抽，按住 Tab 图解，L 记录，H 规则，Esc 取消。" % [Rules.PLAYS, Rules.PRUNES, Rules.TRANSPLANTS, Rules.HARVEST_SAP_PER_TURN]
 	rules_panel.add_child(rl)
 
 	# ---------- 右列：预计脉动 + 印章按钮 + 工具 ----------
@@ -292,8 +315,15 @@ func _build() -> void:
 	b_end.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	b_end.pressed.connect(_end_turn)
 	right.add_child(b_end)
+	b_harvest = _button(right, "提前收获　[G]")
+	b_harvest.pressed.connect(_harvest)
+	b_harvest.tooltip_text = "本季已达标时可以直接结束本季，剩余每回合折算 %d 养分。" % Rules.HARVEST_SAP_PER_TURN
 	b_prune = _button(right, "修剪　[P]")
 	b_prune.pressed.connect(_toggle_prune)
+	b_prune.tooltip_text = "剪下的牌回到手牌，下回合可以重新打出。"
+	b_transplant = _button(right, "移栽　[T]")
+	b_transplant.pressed.connect(_toggle_transplant)
+	b_transplant.tooltip_text = "把一张牌连同它后面的枝整体挪到另一个空芽点，保留成熟度。每回合 %d 次。" % Rules.TRANSPLANTS
 	b_redraw = _button(right, "重抽手牌（%d 养分）　[R]" % Rules.REDRAW_COST)
 	b_redraw.pressed.connect(_redraw)
 
@@ -438,6 +468,12 @@ func _build_modal() -> void:
 # ---------- 刷新 ----------
 
 func _targets() -> Dictionary:
+	if transplant_mode and transplant_from != BoardView.NO_CELL:
+		var out := {}
+		var mvs := run.transplant_targets(transplant_from)
+		for c in mvs:
+			out[c] = mvs[c].target
+		return out
 	return _targets_of(sel)
 
 
@@ -456,7 +492,9 @@ func _refresh() -> void:
 	board.delta = {}
 	board.ghost_type = &""
 	board.ctx = run.ctx()
-	board.set_state(run.tree, res, _targets(), prune_mode, flash)
+	board.set_state(run.tree, res, _targets(), prune_mode or (transplant_mode and transplant_from == BoardView.NO_CELL), flash)
+	if transplant_mode and transplant_from != BoardView.NO_CELL:
+		board.highlight = Growth.subtree(run.tree, transplant_from)
 
 	lbl_season.text = run.season_label()
 	lbl_turn.text = "回合 %d/%d" % [mini(run.turn, run.turns_this_season()), run.turns_this_season()]
@@ -477,22 +515,34 @@ func _refresh() -> void:
 ".join(run.relics.map(func(r): return "%s：%s" % [Cards.relic(r).display_name, Cards.relic(r).desc]))
 	if relic_bar:
 		relic_bar.set_relics(run.relics)
-		relic_bar.visible = not (board is Board3D)
 	if board is Board3D:
-		board.set_relics(run.relics)
 		if board._season != run.season or board._calamity != (run.calamity if run.is_calamity() else &""):
 			board.set_mood(run.season, run.calamity)
 	lbl_patterns.text = "" if res.patterns.is_empty() else "牌型：" + "、".join(res.patterns.map(func(p): return p.label))
 	lbl_patterns.visible = not res.patterns.is_empty()
+	var pend := run.pending_release()
+	if res.stored_total > 0 or pend > 0:
+		lbl_patterns.text += ("
+" if lbl_patterns.text != "" else "") + "封存：本次 +%d，季末释放 %d" % [res.stored_total, pend]
+		lbl_patterns.visible = true
 	lbl_sap.text = str(run.sap)
 	lbl_piles.text = "%d / %d" % [run.deck.size(), run.discard.size()]
-	lbl_acts.text = "%d / %d" % [run.plays, run.prunes]
+	lbl_acts.text = "%d / %d / %d" % [run.plays, run.prunes, run.transplants]
+	lbl_heat.text = "%d / %d" % [run.heat, run.burned_total]
+	lbl_heat.get_parent().visible = run.heat > 0 or res.family_counts.has(&"forge")
+	_refresh_resonance(res)
 
 	var playing := run.phase == RunState.Phase.PLAY
 	b_end.disabled = not playing or (tut != null and not tut.can_end_turn())
+	b_harvest.disabled = not run.can_harvest() or tut != null
+	b_harvest.text = ("提前收获 +%d 养分　[G]" % run.harvest_sap()) if run.can_harvest() else "提前收获（未达标）"
+	b_harvest.theme_type_variation = &"PrimaryButton" if run.can_harvest() else &""
 	b_prune.disabled = not run.can_prune() or (tut != null and not tut.can_prune_mode())
 	b_prune.text = "取消修剪　[P]" if prune_mode else "修剪　[P]"
 	b_prune.theme_type_variation = &"ActiveButton" if prune_mode else &""
+	b_transplant.disabled = (not run.can_transplant() and not transplant_mode) or (tut != null and not tut.is_free())
+	b_transplant.text = "取消移栽　[T]" if transplant_mode else "移栽　[T]"
+	b_transplant.theme_type_variation = &"ActiveButton" if transplant_mode else &""
 	b_redraw.disabled = not run.can_redraw() or (tut != null and not tut.is_free())
 
 	_refresh_hand()
@@ -508,6 +558,25 @@ func _refresh() -> void:
 		log_box.add_child(l)
 
 
+## 共鸣面板：牌桌上各流派的牌数与下一个阈值；已激活的层数用流派色。
+func _refresh_resonance(res: Pulse.Result) -> void:
+	var parts: Array[String] = []
+	var tips: Array[String] = []
+	for f in CardDef.FAMILY_NAMES:
+		if f == &"wood" or not res.family_counts.has(f):
+			continue
+		var t := Pulse.resonance_text(f, res.family_counts[f])
+		var tier: int = res.resonance.get(f, 0)
+		parts.append(t + ("（%d 层）" % tier if tier > 0 else ""))
+		tips.append("%s：%s" % [CardDef.FAMILY_NAMES[f], Pulse.RESONANCE_DESC.get(f, "")])
+	lbl_res.visible = not parts.is_empty()
+	lbl_res.text = "共鸣　" + "　".join(parts)
+	lbl_res.tooltip_text = "牌桌上同一流派的牌达到 2 / 4 / 6 张时激活共鸣。
+" + "
+".join(tips)
+	lbl_res.add_theme_color_override("font_color", Palette.OCHRE.darkened(0.2) if not res.resonance.is_empty() else Palette.SOFT)
+
+
 func _refresh_hand() -> void:
 	var sig := ",".join(run.hand.map(func(x): return String(x)))
 	if sig != _hand_sig:
@@ -515,11 +584,18 @@ func _refresh_hand() -> void:
 		hand_view.sync(run.hand)
 	deck_pile.count = run.deck.size()
 	discard_pile.count = run.discard.size()
+	var discarding := run.phase == RunState.Phase.DISCARD
 	for ch in hand_view.cards():
 		var can := not _targets_of(ch.index).is_empty()
-		ch.disabled = not can
+		ch.disabled = not can and not discarding
 		ch.selected = ch.index == sel
-		if tut and not tut.card_allowed(ch.card_id):
+		if discarding:
+			ch.note = "点击弃掉"
+			ch.note_alert = true
+		elif run.is_fresh(ch.index):
+			ch.note = "刚剪下：下回合可用"
+			ch.note_alert = false
+		elif tut and not tut.card_allowed(ch.card_id):
 			ch.note = "指导中暂不使用"
 			ch.note_alert = true
 		else:
@@ -530,7 +606,13 @@ func _refresh_hand() -> void:
 
 
 func _refresh_hint() -> void:
-	if prune_mode:
+	if run.phase == RunState.Phase.DISCARD:
+		hint.text = "手牌超过上限 %d：点手牌弃掉，还需弃 %d 张。" % [run.hand_limit(), run.overflow()]
+	elif transplant_mode and transplant_from == BoardView.NO_CELL:
+		hint.text = "移栽模式：点一张牌，把它和它后面的枝一起挪走。"
+	elif transplant_mode:
+		hint.text = "移栽%s：点亮的格子是新位置（整段枝随新朝向旋转）。右键或 Esc 取消。" % _nm(run.tree.at(transplant_from))
+	elif prune_mode:
 		hint.text = "修剪模式：点一张牌，剪掉它和它后面的所有枝。"
 	elif sel >= 0:
 		hint.text = "选中%s：点亮的虚线格可以放。把鼠标移到格子上查看预计变化。" % Cards.get_def(run.hand[sel]).display_name
@@ -541,9 +623,16 @@ func _refresh_hint() -> void:
 # ---------- 输入 ----------
 
 func _select(i: int) -> void:
+	if run.phase == RunState.Phase.DISCARD:
+		if run.discard_card(i):
+			Game.sfx(&"click", 0.8)
+			_hand_sig = ""
+			_after_action()
+		return
 	Game.sfx(&"click", 1.2)
 	sel = -1 if sel == i else i
 	prune_mode = false
+	_cancel_transplant()
 	flash = {}
 	_refresh()
 
@@ -562,6 +651,26 @@ func _on_card_dropped(i: int, c: Vector2i) -> void:
 
 func _on_cell_clicked(c: Vector2i) -> void:
 	if board.is_animating():
+		return
+	if transplant_mode:
+		if transplant_from == BoardView.NO_CELL:
+			if c != TreeModel.SEED_KEY and run.tree.has(c):
+				if run.transplant_targets(c).is_empty():
+					hint.text = "%s没有可以挪去的位置（藤不能作为移栽的起点；子枝里有接到外面的藤也不行）。" % _nm(run.tree.at(c))
+					return
+				transplant_from = c
+				Game.sfx(&"click", 1.1)
+				_refresh()
+		elif c == transplant_from:
+			transplant_from = BoardView.NO_CELL
+			_refresh()
+		elif run.transplant(transplant_from, c):
+			Game.sfx(&"place")
+			board.stamp_at(c, Palette.OCHRE)
+			Fx.shake(board, 1.2, 0.15)
+			_cancel_transplant()
+			flash = {}
+			_after_action()
 		return
 	if prune_mode:
 		if tut and not tut.prune_allowed(run, c):
@@ -602,6 +711,17 @@ func _on_cell_hovered(c: Vector2i) -> void:
 	board.ghost_type = &""
 	board.set_trace(BoardView.NO_CELL)
 	board.set_chain("")
+	if transplant_mode:
+		if transplant_from == BoardView.NO_CELL and c != TreeModel.SEED_KEY and run.tree.has(c):
+			board.highlight = Growth.subtree(run.tree, c)
+			hint.text = "移栽%s：连同后面 %d 张一起挪走。" % [_nm(run.tree.at(c)), board.highlight.size() - 1]
+		elif transplant_from != BoardView.NO_CELL:
+			board.highlight = Growth.subtree(run.tree, transplant_from)
+			var after := run.tree_after_transplant(transplant_from, c)
+			if after:
+				hint.text = "挪到这里：下次脉动 %d → %d" % [now, Pulse.resolve(after, run.ctx()).total]
+		board.queue_redraw()
+		return
 	if sel >= 0 and board.targets.has(c):
 		_preview_placement(c, now)
 	elif sel >= 0:
@@ -658,7 +778,7 @@ func _show_flow(c: Vector2i) -> void:
 	if n.is_seed():
 		hint.text = "树心：每季成熟一次，输出的养分翻倍；第 y 年再乘以 y。"
 	else:
-		hint.text = "%s（%s）：%s" % [n.def().display_name, n.def().category_name(), n.def().desc]
+		hint.text = "%s（%s）：%s" % [n.def().display_name, n.def().tag_line(), n.def().desc]
 		if not n.marks.is_empty():
 			hint.text += "  年轮：" + "、".join(n.marks.map(func(m): return Rules.mark_name(m)))
 
@@ -727,7 +847,37 @@ func _toggle_prune() -> void:
 		return
 	prune_mode = not prune_mode
 	sel = -1
+	_cancel_transplant()
 	_refresh()
+
+
+func _toggle_transplant() -> void:
+	if transplant_mode:
+		_cancel_transplant()
+	elif run.can_transplant() and (tut == null or tut.is_free()):
+		transplant_mode = true
+		transplant_from = BoardView.NO_CELL
+		prune_mode = false
+		sel = -1
+	_refresh()
+
+
+func _cancel_transplant() -> void:
+	transplant_mode = false
+	transplant_from = BoardView.NO_CELL
+
+
+func _harvest() -> void:
+	if board.is_animating() or tut != null or not run.can_harvest():
+		return
+	sel = -1
+	prune_mode = false
+	_cancel_transplant()
+	run.harvest()
+	Game.sfx(&"win")
+	Game.save()
+	_refresh()
+	_show_phase_modal()
 
 
 func _redraw() -> void:
@@ -752,8 +902,14 @@ func _end_turn() -> void:
 	var res := run.end_turn()
 	if res == null:
 		return
+	if tut == null:
+		var msgs := Game.profile.record_pulse(run, snap, res)
+		if run.phase == RunState.Phase.WON:
+			msgs.append_array(Game.profile.record_progress(run))
+		_toast(msgs)
 	sel = -1
 	prune_mode = false
+	_cancel_transplant()
 	flash = res.contrib.duplicate()
 	hand_view.draw_delay = board.pulse_duration(snap)
 	if not Game.reduce_motion:
@@ -762,8 +918,8 @@ func _end_turn() -> void:
 	_after_action()
 	_build_sheet()
 	board.play_pulse(snap, res)
-	if board is Board3D:
-		board.flash_relics(_active_relics(snap, res, first_pulse), 0.25)
+	if relic_bar:
+		relic_bar.flash(_active_relics(snap, res, first_pulse), 0.25)
 	if board.is_animating():
 		await board.pulse_finished
 	if _score_shown >= 0:
@@ -968,6 +1124,13 @@ func _unhandled_input(e: InputEvent) -> void:
 			_end_turn()
 		KEY_P:
 			_toggle_prune()
+		KEY_T:
+			_toggle_transplant()
+		KEY_G:
+			_harvest()
+		KEY_F:
+			if board is Board3D:
+				board.reset_view()
 		KEY_R:
 			_redraw()
 		KEY_L:
@@ -977,6 +1140,7 @@ func _unhandled_input(e: InputEvent) -> void:
 		KEY_ESCAPE:
 			sel = -1
 			prune_mode = false
+			_cancel_transplant()
 			_refresh()
 		_:
 			var i: int = e.keycode - KEY_1
@@ -989,6 +1153,40 @@ func _unhandled_input(e: InputEvent) -> void:
 
 # ---------- 弹窗 ----------
 
+## 右上角依次浮出几条消息（联动谱新条目、解锁），同时写进记录。
+func _toast(msgs: Array[String]) -> void:
+	var all := Game.notices.duplicate()
+	all.append_array(msgs)
+	Game.notices.clear()
+	for i in all.size():
+		run.add_log(all[i])
+		var box := PanelContainer.new()
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = Color(Palette.INK, 0.88)
+		sb.border_color = Palette.GOLD
+		sb.set_border_width_all(1)
+		sb.content_margin_left = 16
+		sb.content_margin_right = 16
+		sb.content_margin_top = 8
+		sb.content_margin_bottom = 8
+		box.add_theme_stylebox_override("panel", sb)
+		box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var l := Label.new()
+		l.text = all[i]
+		l.add_theme_color_override("font_color", Palette.GOLD.lightened(0.35))
+		l.add_theme_font_size_override("font_size", 18)
+		box.add_child(l)
+		fly_layer.add_child(box)
+		box.position = Vector2(size.x - 520, 130 + i * 52)
+		box.modulate.a = 0.0
+		var tw := box.create_tween()
+		tw.tween_interval(0.3 + i * 0.4)
+		tw.tween_property(box, "modulate:a", 1.0, 0.25)
+		tw.tween_interval(3.5)
+		tw.tween_property(box, "modulate:a", 0.0, 0.6)
+		tw.tween_callback(box.queue_free)
+
+
 func _show_phase_modal() -> void:
 	match run.phase:
 		RunState.Phase.REWARD when tut != null:
@@ -999,7 +1197,7 @@ func _show_phase_modal() -> void:
 				btns.append({"card": run.reward_options[i], "fn": _choose_reward.bind(i)})
 			btns.append({"label": "跳过，得 %d 养分" % Rules.SKIP_REWARD_SAP, "fn": _skip_reward})
 			_open_modal("%s达标" % run.season_label(),
-				"本季累计 %d / %d，另得 %d 养分。选一张牌加入牌组，神树会带着现在的形状进入下一季。" % [run.score, run.target(), Rules.SEASON_CLEAR_SAP], btns)
+				"本季累计 %d / %d，另得 %d 养分。选一张牌加入牌组，然后去集市；神树会带着现在的形状进入下一季。" % [run.score, run.target(), Rules.SEASON_CLEAR_SAP], btns)
 		RunState.Phase.RELIC:
 			var btns: Array = []
 			for i in run.relic_options.size():
@@ -1126,9 +1324,29 @@ func _skip_reward() -> void:
 
 
 func _choose_relic(i: int) -> void:
+	if run.relics_full():
+		_ask_replace(i)
+		return
 	run.choose_relic(i)
 	Game.save()
 	Game.goto(&"market")
+
+
+## 器物槽满了：选一件旧器物换下（按出售价返还养分）。
+func _ask_replace(i: int) -> void:
+	var nr := Cards.relic(run.relic_options[i])
+	var btns: Array = []
+	for j in run.relics.size():
+		var old := Cards.relic(run.relics[j])
+		btns.append({"label": "换下%s（+%d 养分）" % [old.display_name, run.relic_sell_price(run.relics[j])], "fn": _replace_relic.bind(i, j)})
+	btns.append({"label": "返回", "fn": _show_phase_modal})
+	_open_modal("器物槽已满", "要装上%s，需要先换下一件器物。" % nr.display_name, btns)
+
+
+func _replace_relic(i: int, j: int) -> void:
+	if run.choose_relic(i, j):
+		Game.save()
+		Game.goto(&"market")
 
 
 func _skip_relic() -> void:
@@ -1140,7 +1358,7 @@ func _skip_relic() -> void:
 func _after_season() -> void:
 	modal.visible = false
 	Game.save()
-	Game.goto(&"map")
+	Game.goto(&"market")
 
 
 ## 把牌桌截成一张“神树版画”，存到 user://prints 并打开文件夹。

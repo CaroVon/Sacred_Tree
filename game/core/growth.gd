@@ -3,8 +3,6 @@ extends RefCounted
 ## 生长：可放置位置计算、放置、修剪。纯函数，直接修改传入的 TreeModel。
 
 const SEED_PORTS: Array[int] = [1, 3, 5]
-## 繁茂印记追加芽点时依次尝试的偏移。
-const LUSH_ORDER: Array[int] = [0, -1, 1, -2, 2, 3]
 
 
 class Target:
@@ -21,17 +19,28 @@ static func ports_of(n: TreeNode, ctx: Pulse.Context = null) -> Array[int]:
 		if ctx and ctx.seed_extra_port:
 			out.append(0)
 		return out
-	var offsets: Array[int] = []
-	for p in n.def().ports:
-		offsets.append(p)
-	if n.marks.has(&"lush"):
-		for p in LUSH_ORDER:
-			if not offsets.has(p):
-				offsets.append(p)
-				break
 	var base := n.facing if n.facing >= 0 else 0
-	for p in offsets:
+	for p in n.def().ports:
 		out.append((base + p + 6) % 6)
+	for d in n.extra_ports:
+		if not out.has(d):
+			out.append(d)
+	return out
+
+
+## 芽点服务可以加的方向：这张牌还没有芽点、且不是它来的方向。
+static func free_port_dirs(n: TreeNode) -> Array[int]:
+	var out: Array[int] = []
+	if n == null or n.is_seed():
+		return out
+	var have := ports_of(n)
+	for d in 6:
+		if have.has(d):
+			continue
+		var c := n.key + Hex.DIRS[d]
+		if n.parents.has(c):
+			continue
+		out.append(d)
 	return out
 
 
@@ -51,7 +60,7 @@ static func targets_for(tree: TreeModel, type: StringName, ctx: Pulse.Context) -
 				continue
 			var ps: Array[Vector2i] = []
 			for nb in Hex.neighbors(c):
-				if pulse.tips.has(nb):
+				if graft_parent_ok(tree, def, nb, pulse):
 					ps.append(nb)
 			if ps.size() >= def.graft_min:
 				var t := Target.new()
@@ -119,7 +128,10 @@ static func remove_set(tree: TreeModel, set: Dictionary) -> void:
 static func prune_gain(tree: TreeModel, set: Dictionary, per_card_extra: int = 0) -> int:
 	var gain := 0
 	for x in set:
-		gain += tree.at(x).def().prune_value + per_card_extra
+		var g := tree.at(x).def().prune_value + per_card_extra
+		if tree.at(x).marks.has(&"gilded"):
+			g *= 2
+		gain += g
 	return gain
 
 
@@ -129,6 +141,95 @@ static func prune_tip_bonus(tree: TreeModel, set: Dictionary) -> int:
 	for x in set:
 		b += tree.at(x).def().prune_tip_bonus
 	return b
+
+
+# ---------- 移栽 ----------
+
+## 一次移栽：根牌的新位置与父牌，以及子枝每个格子的新位置。
+class Move:
+	extends RefCounted
+	var target: Target
+	var rot: int = 0
+	var map: Dictionary = {}  # 旧格 -> 新格
+
+
+## 六边形绕原点旋转 r 个 60°（DIRS[i] → DIRS[i+r]）。
+static func rotate(c: Vector2i, r: int) -> Vector2i:
+	var v := c
+	for i in posmod(r, 6):
+		v = Vector2i(v.x + v.y, -v.x)
+	return v
+
+
+## 把 k 连同它的子枝整体挪到别处的可选落点：新格 -> Move。
+## 子枝保持形状随新朝向旋转；藤不能作为根，子枝里的藤必须所有父牌都在子枝内。
+static func transplant_targets(tree: TreeModel, k: Vector2i, ctx: Pulse.Context) -> Dictionary:
+	var res := {}
+	var root := tree.at(k)
+	if root == null or root.is_seed() or root.def().is_graft() or root.facing < 0:
+		return res
+	var set := subtree(tree, k)
+	for x in set:
+		if x == k:
+			continue
+		for p in tree.at(x).parents:
+			if not set.has(p):
+				return res
+	var rest := tree.copy()
+	remove_set(rest, set)
+	var tg := targets_for(rest, root.type, ctx)
+	for c in tg:
+		var t: Target = tg[c]
+		if c == k and t.facing == root.facing:
+			continue
+		var mv := Move.new()
+		mv.target = t
+		mv.rot = t.facing - root.facing
+		var new_root_depth := 0
+		for p in t.parents:
+			new_root_depth = maxi(new_root_depth, rest.at(p).depth + 1)
+		var dd := new_root_depth - root.depth
+		var ok := true
+		for x in set:
+			var nc: Vector2i = c + rotate(x - k, mv.rot)
+			var md := tree.at(x).def().min_depth
+			if not can_grow_on(rest, nc) or (md > 0 and tree.at(x).depth + dd < md):
+				ok = false
+				break
+			mv.map[x] = nc
+		if ok:
+			res[c] = mv
+	return res
+
+
+## 执行移栽（直接修改 tree）。成熟度、印记保留；放置顺序挪到最后（父牌先于子牌）。
+static func transplant(tree: TreeModel, k: Vector2i, mv: Move) -> void:
+	var set := subtree(tree, k)
+	var moving: Array[TreeNode] = []
+	for x in set:
+		moving.append(tree.at(x))
+	moving.sort_custom(func(a: TreeNode, b: TreeNode): return a.order < b.order)
+	remove_set(tree, set)
+	for n in moving:
+		var old: Vector2i = n.key
+		n.key = mv.map[old]
+		if old == k:
+			n.parents = mv.target.parents.duplicate()
+		else:
+			n.parents.assign(n.parents.map(func(p): return mv.map[p]))
+		n.children.assign(n.children.map(func(c): return mv.map[c]))
+		if n.facing >= 0:
+			n.facing = posmod(n.facing + mv.rot, 6)
+		n.extra_ports.assign(n.extra_ports.map(func(d): return posmod(d + mv.rot, 6)))
+		var depth := 0
+		for p in n.parents:
+			depth = maxi(depth, tree.at(p).depth)
+		n.depth = depth + 1
+		n.order = tree.next_order
+		tree.next_order += 1
+		tree.nodes[n.key] = n
+	for p in mv.target.parents:
+		tree.at(p).children.append(mv.map[k])
 
 
 # ---------- 解释 ----------
@@ -165,6 +266,14 @@ static func _nm(n: TreeNode) -> String:
 	return "树心" if n.is_seed() else n.def().display_name
 
 
+## 嫁接牌能否以 nb 为父牌：普通藤要求末梢；带 graft_family 的（枢纽）要求是该流派的牌。
+static func graft_parent_ok(tree: TreeModel, def: CardDef, nb: Vector2i, pulse: Pulse.Result) -> bool:
+	if def.graft_family != &"":
+		var m := tree.at(nb)
+		return m != null and not m.is_seed() and m.def().has_family(def.graft_family)
+	return pulse.tips.has(nb)
+
+
 ## 某格为什么不能放这张牌；能放返回空字符串。
 static func why_not(tree: TreeModel, type: StringName, c: Vector2i, ctx: Pulse.Context) -> String:
 	var def := Cards.get_def(type)
@@ -178,13 +287,14 @@ static func why_not(tree: TreeModel, type: StringName, c: Vector2i, ctx: Pulse.C
 		Land.Type.SPRING:
 			return "泉眼上无法生长，但它会给相邻的末梢 +%d。" % Land.SPRING_BONUS
 	if def.is_graft():
-		var tips := Pulse.resolve(tree, ctx).tips
+		var pr := Pulse.resolve(tree, ctx)
 		var n := 0
 		for nb in Hex.neighbors(c):
-			if tips.has(nb):
+			if graft_parent_ok(tree, def, nb, pr):
 				n += 1
 		if n < def.graft_min:
-			return "%s要放在同时挨着 %d 个以上末梢的空格上，这里只挨着 %d 个末梢。" % [def.display_name, def.graft_min, n]
+			var what := ("%s牌" % CardDef.FAMILY_NAMES.get(def.graft_family, "")) if def.graft_family != &"" else "末梢"
+			return "%s要放在同时挨着 %d 个以上%s的空格上，这里只挨着 %d 个。" % [def.display_name, def.graft_min, what, n]
 		return ""
 	var pointing: Array[TreeNode] = []
 	for n: TreeNode in tree.nodes.values():
@@ -198,7 +308,7 @@ static func why_not(tree: TreeModel, type: StringName, c: Vector2i, ctx: Pulse.C
 			var m := tree.at(nb)
 			if m == null:
 				continue
-			if not m.is_seed() and m.def().ports.is_empty() and not m.marks.has(&"lush"):
+			if not m.is_seed() and m.def().ports.is_empty() and m.extra_ports.is_empty():
 				ends.append(m.def().display_name)
 			else:
 				near.append(_nm(m))
@@ -220,6 +330,8 @@ static func why_not(tree: TreeModel, type: StringName, c: Vector2i, ctx: Pulse.C
 static func hand_reason(tree: TreeModel, type: StringName, ctx: Pulse.Context) -> String:
 	var def := Cards.get_def(type)
 	if def.is_graft():
+		if def.graft_family != &"":
+			return "没有同时挨着 %d 张%s牌的空格" % [def.graft_min, CardDef.FAMILY_NAMES.get(def.graft_family, "")]
 		return "没有同时挨着 %d 个末梢的空格" % def.graft_min
 	if open_bud_count(tree, ctx) == 0:
 		return "芽点全被占了，修剪可腾出空间"

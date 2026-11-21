@@ -7,3 +7,4 @@ script = ExtResource("1")
 id = &"root"
 display_name = "古树根"
 desc = "树心多 1 个芽点"
+price = 10

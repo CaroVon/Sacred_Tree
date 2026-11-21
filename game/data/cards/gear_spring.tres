@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="CardDef" format=3]
+
+[ext_resource type="Script" path="res://core/card_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"gear_spring"
+display_name = "发条"
+category = 2
+ports = PackedInt32Array()
+effect = 3
+value = 1.0
+color_key = &"steel"
+price = 4
+rarity = 1
+family = Array[StringName]([&"gear"])
+keywords = Array[StringName]([&"tip", &"timing"])
+desc = "末端 ×1；每次脉动后倍率 +1，最多 ×5"
+mature_step = 1.0
+mature_cap = 4.0

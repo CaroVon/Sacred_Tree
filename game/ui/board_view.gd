@@ -86,6 +86,11 @@ var chain_label: Label
 var _clock: float = 0.0
 
 
+## 当前牌桌半径（随年份扩张）；还没有牌桌时用原型半径。
+func board_radius() -> int:
+	return tree.radius if tree else Rules.RADIUS
+
+
 func _init() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -248,7 +253,7 @@ func _process(delta_t: float) -> void:
 
 
 func _layout() -> void:
-	var r := Rules.RADIUS
+	var r := board_radius()
 	var w := Hex.SQRT3 * (r + 0.45) * 2.0
 	var h := (1.5 * r + 0.9) * 2.0
 	var avail := Vector2(size.x - margins.x - margins.z, size.y - margins.y - margins.w)
@@ -259,14 +264,14 @@ func _layout() -> void:
 
 ## 六边形网格占据的矩形（全局坐标），导出版画时用。
 func grid_rect() -> Rect2:
-	var r := Rules.RADIUS
+	var r := board_radius()
 	var half := Vector2(Hex.SQRT3 * (r + 0.6), 1.5 * r + 1.1) * hex_size
 	return Rect2(global_position + origin - half, half * 2.0)
 
 
 func cell_at(p: Vector2) -> Vector2i:
 	var c := Hex.from_pixel(p - origin, hex_size)
-	return c if Hex.in_board(c, Rules.RADIUS) else NO_CELL
+	return c if Hex.in_board(c, board_radius()) else NO_CELL
 
 
 func center_of(c: Vector2i) -> Vector2:
@@ -376,7 +381,7 @@ func _draw() -> void:
 	_draw_courtyard()
 
 	# ---------- 地块 ----------
-	for c in Hex.all_cells(Rules.RADIUS):
+	for c in Hex.all_cells(board_radius()):
 		var p := center_of(c)
 		_draw_land(c, p, s, k)
 		if not tree.has(c) and targets.has(c):
@@ -399,7 +404,7 @@ func _draw() -> void:
 			for c in pat.cells:
 				badges[c] = info
 		if pulse.total_mult > 1.0:
-			_hex_outline(origin, s * (Rules.RADIUS + 0.9) * Hex.SQRT3, Palette.OCHRE, 2.0 * k, true)
+			_hex_outline(origin, s * (board_radius() + 0.9) * Hex.SQRT3, Palette.OCHRE, 2.0 * k, true)
 
 	# ---------- 节点 ----------
 	for n: TreeNode in tree.nodes.values():
@@ -491,6 +496,11 @@ func _draw_land(c: Vector2i, p: Vector2, s: float, k: float) -> void:
 		Land.Type.SPRING:
 			art = &"land_spring"
 			base = Palette.WATER.lerp(Palette.CELL, 0.55)
+		Land.Type.ORE, Land.Type.LAVA, Land.Type.STARWELL, Land.Type.GOLDSAND:
+			art = &"land_plain"
+			var lc: Color = {Land.Type.ORE: Palette.STEEL, Land.Type.LAVA: Palette.EMBER,
+				Land.Type.STARWELL: Palette.ASTRAL, Land.Type.GOLDSAND: Palette.COIN}[lt]
+			base = lc.lerp(Palette.CELL, 0.5)
 		_:
 			art = &"land_plain"
 			base = Palette.CELL.darkened(0.10)
@@ -655,7 +665,7 @@ func _draw_node(n: TreeNode, p: Vector2, s: float, k: float, v: int, is_tip: boo
 	draw_colored_polygon(sh, Color(Palette.INK, 0.3))
 	draw_colored_polygon(pts, fill)
 	# 牌面图版（裁成中间的一块）
-	var tex := CardArt.texture(def.id)
+	var tex := CardArt.texture(def.art_id())
 	if tex != null:
 		var ts := tex.get_size()
 		if ts.x > 0.0:

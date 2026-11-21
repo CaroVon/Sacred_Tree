@@ -43,6 +43,8 @@ func test_full_season_flow() -> void:
 		check_eq(s.reward_options.size(), Rules.REWARD_CHOICES)
 		var n := s.tree.size()
 		s.choose_reward(0)
+		check_eq(s.phase, RunState.Phase.MARKET)
+		s.leave_market()
 		check_eq(s.season, 2)
 		check_eq(s.tree.size(), n, "tree persists across seasons")
 		check_eq(s.hand.size(), Rules.hand_size(2))
@@ -56,6 +58,7 @@ func test_prune_gives_sap() -> void:
 	var gain := s.prune(k)
 	check_eq(gain, pv.gain)
 	check_eq(s.sap, gain)
+	check(s.hand_fresh.has(true) or s.exhausted.size() > 0, "pruned cards return to hand or exhaust")
 	check_eq(s.preview().total, pv.total)
 	check_eq(s.prune(k), -1, "only one prune per turn")
 

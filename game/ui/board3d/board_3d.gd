@@ -10,14 +10,11 @@ extends BoardView
 ## 背景和 3D 视口都设了 show_behind_parent，所以画在本控件的 _draw 之下。
 ## 规则相关的状态、信号、动画计时全部继承 BoardView。
 
-signal relic_hovered(id: StringName)
-
 const PITCH := 64.0           # 相机俯角（更俯：前后排拉开，前排压不住后排）
 const FOV := 30.0
 const WOOD_Y := 0.07          # 枝条离地高度
 const LABEL_Y := 0.7          # 标注挂在立牌的半高处
 const POP_DUR := 0.42         # 立牌翻立的时长
-const PLINTH_TOP := 0.36      # 器物石鼓顶面
 const STANDEE_TILT := 0.72    # 立牌朝镜头倾斜的比例（相对俯角）；越大越「躺」，竖向遮挡越小
 ## 悬停透视：挡在目标格前面的立牌淡到这个不透明度。
 const XRAY_ALPHA := 0.32
@@ -40,7 +37,6 @@ var _ground_mat: ShaderMaterial
 var _land_root: Node3D
 var _wood_root: Node3D
 var _piece_root: Node3D
-var _relic_root: Node3D
 var _fx_root: Node3D
 var _motes: CPUParticles3D
 var _weather: Node3D
@@ -59,6 +55,13 @@ var _was_animating: bool = false
 var _cam_d: float = 20.0
 var _ho: float = 0.0
 var _vo: float = 0.0
+## 视角：缩放倍数（1 = 正好放下整张牌桌）与平移（台面坐标）。
+const ZOOM_MIN := 1.0
+const ZOOM_MAX := 3.2
+var zoom: float = 1.0
+var pan: Vector2 = Vector2.ZERO
+var _drag_pan: bool = false
+var _fit_radius: int = -1
 ## 当前季节（1–4 = 春夏秋冬，5 = 天灾季）与天灾。
 var _season: int = 1
 var _calamity: StringName = &""
@@ -66,8 +69,6 @@ var _base_energy: float = 0.7
 var _flash: float = 0.0              # 雷击闪光
 var _next_bolt: float = 3.0
 
-var _relics: Array[RelicSlot] = []
-var _relic_hover: int = -1
 
 static var _mat_cache: Dictionary = {}
 static var _mesh_cache: Dictionary = {}
@@ -82,16 +83,6 @@ class Piece:
 	var bounce_t: float = -1.0   # 脉动末梢的弹跳
 	var leave_t: float = 0.0
 	var phase: float = 0.0       # 摇摆相位
-
-
-class RelicSlot:
-	var id: StringName
-	var node: Node3D
-	var sprite: Sprite3D
-	var light: OmniLight3D
-	var hop_t: float = -1.0
-	var hop_delay: float = 0.0
-	var hover: float = 0.0
 
 
 # ======================================================================
@@ -160,8 +151,6 @@ func _ready() -> void:
 	_world.add_child(_wood_root)
 	_piece_root = Node3D.new()
 	_world.add_child(_piece_root)
-	_relic_root = Node3D.new()
-	_world.add_child(_relic_root)
 	_fx_root = Node3D.new()
 	_world.add_child(_fx_root)
 	_build_motes()
@@ -177,7 +166,7 @@ func _build_ground() -> void:
 	_ground.mesh = pm
 	_ground_mat = ShaderMaterial.new()
 	_ground_mat.shader = load("res://ui/board3d/ground.gdshader")
-	_ground_mat.set_shader_parameter("radius", float(Rules.RADIUS))
+	_ground_mat.set_shader_parameter("radius", float(board_radius()))
 	# 透明物体按距离排序；台面、地貌、接触阴影永远先画，立牌才不会被台面的半透明盖住
 	_ground_mat.render_priority = -30
 	_ground.material_override = _ground_mat
@@ -388,9 +377,53 @@ static func _dot_quad(sz: float) -> QuadMesh:
 
 
 ## 一张牌的拟态立牌贴图；没有就退回牌面插画。
+static var _placeholder_cache: Dictionary = {}
+
+
 static func standee_texture(id: StringName) -> Texture2D:
+	id = StringName(String(id).trim_suffix("+"))
 	var t := CardArt.texture(StringName("standee_" + String(id)))
-	return t if t else CardArt.texture(id)
+	if t == null:
+		t = CardArt.texture(id)
+	return t if t else placeholder_standee(id)
+
+
+## 缺图时的占位立牌：流派色的纸雕徽记（一枚竖长的盾形剪纸 + 浅色内圈），不再隐形。
+static func placeholder_standee(id: StringName) -> Texture2D:
+	if _placeholder_cache.has(id):
+		return _placeholder_cache[id]
+	var def := Cards.get_def(id)
+	var col := Palette.family_color(def.families()[0]) if def else Palette.OLIVE
+	var w := 96
+	var h := 160
+	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	var cx := w * 0.5
+	for y in h:
+		for x in w:
+			var dx := (x - cx) / (w * 0.46)
+			var top := 20.0
+			var inside := false
+			if y >= top and y < h * 0.62:
+				inside = absf(dx) <= 1.0
+			elif y >= h * 0.62:
+				var t := (y - h * 0.62) / (h * 0.38)
+				inside = absf(dx) <= 1.0 - t
+			elif y < top:
+				var r := Vector2(x - cx, y - top).length()
+				inside = r <= w * 0.46 and false
+			if not inside:
+				continue
+			var ring := Vector2(x - cx, y - h * 0.42).length()
+			var c := col
+			if ring < w * 0.26 and ring > w * 0.18:
+				c = Palette.CREAM
+			elif absf(dx) > 0.88 or y < top + 4:
+				c = col.darkened(0.3)
+			img.set_pixel(x, y, c)
+	var tex := ImageTexture.create_from_image(img)
+	_placeholder_cache[id] = tex
+	return tex
 
 
 ## 立牌高度（世界单位）：末端与相邻牌（果、花）最显眼，传导与修剪牌矮一些。
@@ -415,18 +448,120 @@ func _layout() -> void:
 	if _cam == null:
 		return
 	_vp.size = Vector2i(maxi(2, int(size.x)), maxi(2, int(size.y)))
+	_fit_radius = board_radius()
+	_ground_mat.set_shader_parameter("radius", float(_fit_radius))
 	_fit_camera()
+	_clamp_pan()
+	_apply_view()
+
+
+func _place_cam(d: float, ho: float, vo: float, at: Vector3 = Vector3.ZERO) -> void:
+	var p := deg_to_rad(PITCH)
+	_cam.position = at + Vector3(0, sin(p), cos(p)) * d
+	_cam.look_at(at, Vector3.UP)
+	_cam.h_offset = ho
+	_cam.v_offset = vo
+
+
+## 按当前缩放与平移摆相机（基于 _fit_camera 算出的“整桌”机位）。
+func _apply_view() -> void:
+	_place_cam(_cam_d / zoom, _ho / zoom, _vo / zoom, Vector3(pan.x, 0.0, pan.y))
 	origin = _proj(Vector3.ZERO)
 	hex_size = maxf(8.0, (_proj(Vector3(Hex.SQRT3, 0, 0)) - origin).length() / Hex.SQRT3)
 	queue_redraw()
 
 
-func _place_cam(d: float, ho: float, vo: float) -> void:
-	var p := deg_to_rad(PITCH)
-	_cam.position = Vector3(0, sin(p), cos(p)) * d
-	_cam.look_at(Vector3.ZERO, Vector3.UP)
-	_cam.h_offset = ho
-	_cam.v_offset = vo
+## 屏幕点落在台面上的位置。
+func _ground_at(p: Vector2) -> Vector3:
+	var o := _cam.project_ray_origin(p)
+	var d := _cam.project_ray_normal(p)
+	if absf(d.y) < 0.0001:
+		return Vector3.ZERO
+	return o + d * (-o.y / d.y)
+
+
+## 以屏幕点 at 为中心缩放。
+func zoom_at(at: Vector2, factor: float) -> void:
+	if _cam == null:
+		return
+	var before := _ground_at(at)
+	zoom = clampf(zoom * factor, ZOOM_MIN, ZOOM_MAX)
+	_apply_view()
+	var after := _ground_at(at)
+	pan += Vector2(before.x - after.x, before.z - after.z)
+	_clamp_pan()
+	_apply_view()
+
+
+## 按屏幕像素平移。
+func pan_by(px: Vector2) -> void:
+	if _cam == null:
+		return
+	var a := _ground_at(size * 0.5)
+	var b := _ground_at(size * 0.5 + px)
+	pan -= Vector2(b.x - a.x, b.z - a.z)
+	_clamp_pan()
+	_apply_view()
+
+
+func reset_view() -> void:
+	zoom = 1.0
+	pan = Vector2.ZERO
+	if _cam:
+		_apply_view()
+
+
+func _clamp_pan() -> void:
+	var lim := (board_radius() + 1.0) * Hex.SQRT3 * (1.0 - 1.0 / zoom)
+	if pan.length() > lim:
+		pan = pan.normalized() * lim if lim > 0.0 else Vector2.ZERO
+
+
+## 缩放/平移输入：滚轮或 Ctrl+滚轮（触控板捏合）缩放；触控板双指滑动、右键/中键拖动平移；
+## 双击右键复位。处理了返回 true。
+func _view_input(e: InputEvent) -> bool:
+	if e is InputEventMagnifyGesture:
+		zoom_at(e.position, e.factor)
+		return true
+	if e is InputEventPanGesture:
+		pan_by(-e.delta * 12.0)
+		return true
+	if e is InputEventMouseButton:
+		var mb := e as InputEventMouseButton
+		var wheel := mb.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN, MOUSE_BUTTON_WHEEL_LEFT, MOUSE_BUTTON_WHEEL_RIGHT]
+		if wheel:
+			if not mb.pressed:
+				return true
+			var f := mb.factor if mb.factor > 0.0 else 1.0
+			# 精确触控板的双指滑动给出小于 1 的 factor：当作平移；鼠标滚轮与 Ctrl（捏合）当作缩放
+			var smooth := f < 0.99 and not mb.ctrl_pressed
+			match mb.button_index:
+				MOUSE_BUTTON_WHEEL_UP:
+					if smooth:
+						pan_by(Vector2(0, -30.0 * f))
+					else:
+						zoom_at(mb.position, pow(1.12, f))
+				MOUSE_BUTTON_WHEEL_DOWN:
+					if smooth:
+						pan_by(Vector2(0, 30.0 * f))
+					else:
+						zoom_at(mb.position, pow(1.0 / 1.12, f))
+				MOUSE_BUTTON_WHEEL_LEFT:
+					pan_by(Vector2(-30.0 * f, 0))
+				MOUSE_BUTTON_WHEEL_RIGHT:
+					pan_by(Vector2(30.0 * f, 0))
+			return true
+		if mb.button_index == MOUSE_BUTTON_RIGHT or mb.button_index == MOUSE_BUTTON_MIDDLE:
+			if mb.pressed and mb.double_click:
+				reset_view()
+				_drag_pan = false
+				return true
+			_drag_pan = mb.pressed and zoom > 1.001
+			return _drag_pan or not mb.pressed and zoom > 1.001
+	if e is InputEventMouseMotion and _drag_pan:
+		pan_by(-(e as InputEventMouseMotion).relative)
+		return true
+	return false
 
 
 ## 让六边形网格正好放进 margins 留出的矩形里。
@@ -466,8 +601,8 @@ func _fit_camera() -> void:
 func _grid_bbox() -> Rect2:
 	var bb := Rect2()
 	var first := true
-	for c in Hex.all_cells(Rules.RADIUS):
-		if Hex.distance(c, Vector2i.ZERO) < Rules.RADIUS:
+	for c in Hex.all_cells(board_radius()):
+		if Hex.distance(c, Vector2i.ZERO) < board_radius():
 			continue
 		for y: float in [0.0, 1.2]:
 			for p in _proj_hex(c, 1.0, y):
@@ -519,7 +654,7 @@ func cell_at(p: Vector2) -> Vector2i:
 	var t := (0.15 - o.y) / d.y
 	var hit := o + d * t
 	var c := Hex.from_pixel(Vector2(hit.x, hit.z), 1.0)
-	return c if Hex.in_board(c, Rules.RADIUS) else NO_CELL
+	return c if Hex.in_board(c, board_radius()) else NO_CELL
 
 
 func grid_rect() -> Rect2:
@@ -534,6 +669,8 @@ func grid_rect() -> Rect2:
 
 func set_state(t: TreeModel, p: Pulse.Result, tg: Dictionary, prune: bool, fl: Dictionary) -> void:
 	super.set_state(t, p, tg, prune, fl)
+	if board_radius() != _fit_radius:
+		_layout()
 	_sync3d()
 
 
@@ -570,14 +707,19 @@ func _sync_land(t: TreeModel) -> void:
 		ch.queue_free()
 	_land_mats.clear()
 	var shader: Shader = load("res://ui/board3d/land_patch.gdshader")
-	for c in Hex.all_cells(Rules.RADIUS):
+	for c in Hex.all_cells(board_radius()):
 		var lt := t.land_at(c)
 		if lt == Land.Type.PLAIN:
 			continue
 		var art := &"land_fertile"
+		var tint := Color.WHITE
 		match lt:
 			Land.Type.ROCK: art = &"land_rock"
 			Land.Type.SPRING: art = &"land_spring"
+			Land.Type.ORE: tint = Palette.STEEL
+			Land.Type.LAVA: tint = Palette.EMBER
+			Land.Type.STARWELL: tint = Palette.ASTRAL
+			Land.Type.GOLDSAND: tint = Palette.COIN
 		var tex := CardArt.texture(art)
 		if tex == null:
 			continue
@@ -590,6 +732,8 @@ func _sync_land(t: TreeModel) -> void:
 		m.set_shader_parameter("tex", tex)
 		m.set_shader_parameter("uv_rect", Vector4(ox / ts.x, oy / ts.y, side / ts.x, side / ts.y))
 		m.set_shader_parameter("seed", float(c.x * 7 + c.y * 13))
+		m.set_shader_parameter("tint", tint)
+		m.set_shader_parameter("tint_amount", 0.0 if tint == Color.WHITE else 0.75)
 		m.set_shader_parameter("ripple", 1.0 if lt == Land.Type.SPRING and not Game.reduce_motion else 0.0)
 		m.set_shader_parameter("opacity", 0.8 if lt != Land.Type.ROCK else 0.7)
 		m.render_priority = -20
@@ -784,133 +928,13 @@ static func _wood_r(depth: int) -> float:
 
 
 # ======================================================================
-# 器物石鼓
-# ======================================================================
-
-## 器物石鼓的位置：网格左右两侧，左右交替。
-const RELIC_SPOTS := [Vector2(-8.1, -2.7), Vector2(8.1, -2.7), Vector2(-8.1, 3.1), Vector2(8.1, 3.1), Vector2(-6.2, -6.8), Vector2(6.2, -6.8)]
-
-
-func set_relics(ids: Array) -> void:
-	if _relic_root == null:
-		return
-	var want: Array[StringName] = []
-	for i in ids:
-		want.append(StringName(i))
-	var cur: Array[StringName] = []
-	for r in _relics:
-		cur.append(r.id)
-	if want == cur:
-		return
-	for ch in _relic_root.get_children():
-		ch.queue_free()
-	_relics.clear()
-	for i in mini(want.size(), RELIC_SPOTS.size()):
-		_relics.append(_make_relic(want[i], RELIC_SPOTS[i]))
-	_relic_hover = -1
-
-
-func _make_relic(rid: StringName, spot: Vector2) -> RelicSlot:
-	var rs := RelicSlot.new()
-	rs.id = rid
-	rs.node = Node3D.new()
-	rs.node.position = Vector3(spot.x, 0.0, spot.y)
-	_relic_root.add_child(rs.node)
-	rs.node.add_child(_blob(1.9, 0.5))
-	var plinth := MeshInstance3D.new()
-	var cm := CylinderMesh.new()
-	cm.top_radius = 0.62
-	cm.bottom_radius = 0.74
-	cm.height = PLINTH_TOP
-	cm.radial_segments = 20
-	plinth.mesh = cm
-	plinth.position.y = PLINTH_TOP * 0.5
-	plinth.material_override = _flat(&"plinth", Palette.CREAM.darkened(0.06))
-	rs.node.add_child(plinth)
-	var ring := MeshInstance3D.new()
-	var rm := CylinderMesh.new()
-	rm.top_radius = 0.66
-	rm.bottom_radius = 0.66
-	rm.height = 0.05
-	rm.radial_segments = 20
-	ring.mesh = rm
-	ring.position.y = PLINTH_TOP - 0.03
-	ring.material_override = _mat(&"gold", func():
-		var m := StandardMaterial3D.new()
-		m.albedo_color = Palette.GOLD
-		m.metallic = 0.55
-		m.roughness = 0.38
-		return m)
-	rs.node.add_child(ring)
-	var tex := CardArt.texture(StringName("relic_cut_" + String(rid)))
-	if tex == null:
-		tex = CardArt.texture(rid)
-	var sp := Sprite3D.new()
-	sp.texture = tex
-	sp.shaded = false
-	sp.double_sided = true
-	sp.alpha_cut = SpriteBase3D.ALPHA_CUT_OPAQUE_PREPASS
-	sp.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	sp.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-	var h := 2.5
-	if tex:
-		sp.pixel_size = h / maxf(1.0, tex.get_size().y)
-		sp.offset = Vector2(0, tex.get_size().y * 0.5)
-	sp.position.y = PLINTH_TOP + 0.02
-	sp.rotation.x = -deg_to_rad(PITCH) * 0.7
-	rs.node.add_child(sp)
-	rs.sprite = sp
-	var ol := OmniLight3D.new()
-	ol.light_color = Color("#FFD98A")
-	ol.omni_range = 2.2
-	ol.light_energy = 0.0
-	ol.position = Vector3(0, 1.4, 0.6)
-	rs.node.add_child(ol)
-	rs.light = ol
-	return rs
-
-
-## 这些器物在本次脉动里生效：依次跳起发光。
-func flash_relics(ids: Array, delay: float = 0.0) -> void:
-	if Game.reduce_motion:
-		return
-	var n := 0
-	for r in _relics:
-		if ids.has(r.id):
-			r.hop_t = 0.0
-			r.hop_delay = delay + n * 0.12
-			n += 1
-
-
-func _relic_screen(i: int) -> Vector2:
-	return _proj(_relics[i].node.position + Vector3(0, PLINTH_TOP + 0.9, 0))
-
-
-## 器物在屏幕上的位置（给计分演出等动画当起点）。
-func relic_screen_pos(id: StringName) -> Vector2:
-	for i in _relics.size():
-		if _relics[i].id == id:
-			return _relic_screen(i)
-	return Vector2(-1, -1)
-
-
-# ======================================================================
 # 每帧
 # ======================================================================
 
 func _gui_input(e: InputEvent) -> void:
-	if e is InputEventMouseMotion:
-		var best := -1
-		var bd := 50.0 * maxf(1.0, hex_size / 34.0)
-		for i in _relics.size():
-			var d := _relic_screen(i).distance_to(e.position)
-			if d < bd:
-				bd = d
-				best = i
-		if best != _relic_hover:
-			_relic_hover = best
-			relic_hovered.emit(_relics[best].id if best >= 0 else &"")
-			queue_redraw()
+	if _view_input(e):
+		accept_event()
+		return
 	super._gui_input(e)
 
 
@@ -1023,26 +1047,6 @@ func _process(dt: float) -> void:
 			pc.node.queue_free()
 			_leaving.remove_at(i)
 	_update_ghost()
-	# 器物
-	for i in _relics.size():
-		var r := _relics[i]
-		var target := 1.0 if i == _relic_hover else 0.0
-		r.hover = move_toward(r.hover, target, dt * 5.0)
-		var y := PLINTH_TOP + 0.02 + 0.16 * Fx.ease_out(r.hover)
-		var en := 0.9 * r.hover
-		if r.hop_t >= 0.0:
-			if r.hop_delay > 0.0:
-				r.hop_delay -= dt
-			else:
-				r.hop_t += dt / 0.55
-				var t := minf(r.hop_t, 1.0)
-				y += 0.55 * sin(t * PI)
-				en = maxf(en, 2.4 * sin(t * PI))
-				if r.hop_t >= 1.0:
-					r.hop_t = -1.0
-		r.sprite.position.y = y
-		r.sprite.rotation.y = (sin(_clock * 2.2) * 0.35 * r.hover) if motion else 0.0
-		r.light.light_energy = en
 	# 雷击：间歇闪光
 	if _calamity == &"lightning" and motion:
 		_next_bolt -= dt
@@ -1160,7 +1164,7 @@ func _draw() -> void:
 				draw_colored_polygon(_proj_hex(c, 0.72, 0.01), Color(col, 0.22 + 0.08 * breathe))
 		if pulse.total_mult > 1.0:
 			var big := PackedVector2Array()
-			var R := (Rules.RADIUS + 0.9) * Hex.SQRT3
+			var R := (board_radius() + 0.9) * Hex.SQRT3
 			for i in 6:
 				var ang := deg_to_rad(60.0 * i)
 				big.append(_proj(Vector3(cos(ang) * R, 0.0, sin(ang) * R)))
@@ -1243,9 +1247,6 @@ func _draw() -> void:
 	if anim_t < 0.0 and hover != NO_CELL and t.has(hover) and not prune_mode and gt == &"":
 		_draw_node_card(t.at(hover), pulse, k)
 
-	# ---------- 器物提示 ----------
-	if _relic_hover >= 0 and _relic_hover < _relics.size():
-		_draw_relic_tip(_relics[_relic_hover], k)
 
 
 ## 图解视图：每格一块六边形牌片（插画 + 类别色内框 + 牌名 + 效果 + 流出/收获），铺在台面上。
@@ -1274,7 +1275,7 @@ func _draw_diagram(t: TreeModel, pulse: Pulse.Result, k: float, a: float) -> voi
 		var def := n.def()
 		var col := Palette.card_color(def.color_key)
 		draw_colored_polygon(outer, Color(Palette.SHEET, a))
-		var tex := CardArt.texture(def.id)
+		var tex := CardArt.texture(def.art_id())
 		if tex:
 			var ts := tex.get_size()
 			var side: float = ts.x * 0.98
@@ -1323,7 +1324,10 @@ func _draw_node_card(n: TreeNode, pulse: Pulse.Result, k: float) -> void:
 		var def := n.def()
 		var col := Palette.card_color(def.color_key)
 		lines.append([def.display_name, int(20 * sk), Palette.INK, Palette.title_for(def.display_name)])
-		lines.append([def.category_name() + " · " + Pulse.effect_text(def, n), int(14 * sk), col.darkened(0.25), body])
+		if not def.family.is_empty():
+			col = Palette.family_color(def.families()[0])
+		lines.append([def.tag_line(), int(13 * sk), col.darkened(0.2), body])
+		lines.append([Pulse.effect_text(def, n) + "　" + def.desc, int(13 * sk), Palette.SOFT, body])
 		if pulse:
 			if pulse.tips.has(n.key) and pulse.contrib.has(n.key):
 				lines.append(["末梢收获 %d" % pulse.contrib[n.key], int(15 * sk), Palette.TERRA, body])
@@ -1377,28 +1381,3 @@ func _draw_trace3d(t: TreeModel, pulse: Pulse.Result, s: float, k: float, trace_
 			_pill(center_of(x) + Vector2(0, -s * 1.05), label, int(13 * k), Palette.OLIVE.darkened(0.2), Color(Palette.SHEET, 0.96))
 	if pulse and pulse.tips.has(trace_target) and trace_reached >= _trace_depth + 0.6:
 		_pill(_proj(_wpos(trace_target, 0.0)) + Vector2(0, s * 0.7), "收获 %d" % pulse.contrib[trace_target], int(14 * k), Palette.TERRA.darkened(0.1), Color(Palette.SHEET, 0.96))
-
-
-func _draw_relic_tip(r: RelicSlot, k: float) -> void:
-	var def := Cards.relic(r.id)
-	if def == null:
-		return
-	var title := Palette.title_for(def.display_name)
-	var body := Palette.body()
-	var tfs := int(20 * maxf(1.0, k * 0.8))
-	var bfs := int(15 * maxf(1.0, k * 0.8))
-	var tw := title.get_string_size(def.display_name, HORIZONTAL_ALIGNMENT_LEFT, -1, tfs).x
-	var bw := body.get_string_size(def.desc, HORIZONTAL_ALIGNMENT_LEFT, -1, bfs).x
-	var wbox := maxf(tw, bw) + 28.0
-	var hbox := tfs + bfs + 26.0
-	var anchor := _proj(r.node.position + Vector3(0, PLINTH_TOP + 1.0, 0))
-	var side := 1.0 if r.node.position.x < 0.0 else -1.0
-	var rect := Rect2(anchor + Vector2(side * 46.0 * maxf(1.0, k) - (0.0 if side > 0.0 else wbox), -hbox * 0.5), Vector2(wbox, hbox))
-	rect.position.x = clampf(rect.position.x, 8.0, size.x - wbox - 8.0)
-	rect.position.y = maxf(8.0, rect.position.y)
-	draw_rect(Rect2(rect.position + Vector2(4, 5), rect.size), Color(Palette.INK, 0.4))
-	draw_rect(rect, Palette.SHEET)
-	draw_rect(rect, Palette.INK, false, 1.5)
-	draw_rect(rect.grow(-4), Color(Palette.GOLD, 0.7), false, 1.0)
-	draw_string(title, rect.position + Vector2(14, 10 + tfs), def.display_name, HORIZONTAL_ALIGNMENT_LEFT, -1, tfs, Palette.INK)
-	draw_string(body, rect.position + Vector2(14, 16 + tfs + bfs), def.desc, HORIZONTAL_ALIGNMENT_LEFT, -1, bfs, Palette.SOFT)

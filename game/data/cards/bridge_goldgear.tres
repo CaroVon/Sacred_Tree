@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="CardDef" format=3]
+
+[ext_resource type="Script" path="res://core/card_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"bridge_goldgear"
+display_name = "金齿轮"
+category = 0
+ports = PackedInt32Array(0)
+effect = 1
+value = 2.0
+color_key = &"steel"
+price = 5
+rarity = 1
+family = Array[StringName]([&"gear", &"coin"])
+keywords = Array[StringName]([&"link", &"sap"])
+desc = "+2；每个相邻的齿轮或商会牌 +2；每次脉动得 1 养分"
+adj_family_add = 2
+pulse_sap = 1

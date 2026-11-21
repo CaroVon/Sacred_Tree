@@ -11,5 +11,5 @@ ports = PackedInt32Array(0)
 effect = 3
 value = 1.5
 color_key = &"green"
-price = 7
+price = 5
 desc = "×1.5（向下取整）"

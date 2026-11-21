@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="CardDef" format=3]
+
+[ext_resource type="Script" path="res://core/card_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"forge_ash"
+display_name = "灰烬"
+category = 2
+ports = PackedInt32Array()
+effect = 1
+value = 0.0
+color_key = &"ember"
+price = 4
+rarity = 1
+family = Array[StringName]([&"forge"])
+keywords = Array[StringName]([&"tip", &"fuel"])
+desc = "末端；+本局累计燃烧的牌数"
+burned_add = 1
