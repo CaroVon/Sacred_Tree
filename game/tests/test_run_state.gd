@@ -43,6 +43,7 @@ func test_full_season_flow() -> void:
 		check_eq(s.reward_options.size(), Rules.REWARD_CHOICES)
 		var n := s.tree.size()
 		s.choose_reward(0)
+		_skip_event(s)
 		check_eq(s.phase, RunState.Phase.MARKET)
 		s.leave_market()
 		check_eq(s.season, 2)
@@ -76,3 +77,10 @@ func test_save_roundtrip() -> void:
 	s.end_turn()
 	s2.end_turn()
 	check_eq(s2.hand, s.hand)
+
+
+func _skip_event(s: RunState) -> void:
+	if s.phase == RunState.Phase.EVENT:
+		for i in RunEvents.LIST[s.event_id].options.size():
+			if RunEvents.blocked(s, s.event_id, i) == "" and s.choose_event(i):
+				return

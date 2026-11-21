@@ -4,6 +4,7 @@ extends SceneTree
 
 var game
 var easy := false
+var events_seen := 0
 
 
 func _initialize() -> void:
@@ -44,6 +45,13 @@ func _go(runs: int) -> void:
 				"Market":
 					_shop(sc)
 					sc._leave()
+				"Event":
+					events_seen += 1
+					for i in RunEvents.LIST[game.run.event_id].options.size():
+						if RunEvents.blocked(game.run, game.run.event_id, i) == "":
+							sc._choose(i)
+							break
+					game.goto(&"market")
 				"Season":
 					_play_season_step(sc)
 				_:
@@ -51,6 +59,7 @@ func _go(runs: int) -> void:
 			await _settle()
 		summary.append("seed %d: %s 第%d年 %s 累计 %d 器物 %d 树 %d" % [100 + r, RunState.Phase.keys()[game.run.phase],
 			game.run.year, Rules.season_name(game.run.season), game.run.score, game.run.relics.size(), game.run.tree.size()])
+	summary.append("事件页：%d 次" % events_seen)
 	for l in summary:
 		print(l)
 	game.clear_save()

@@ -39,6 +39,10 @@ func _run(scene: String, out: String, turns: int, run_seed: int) -> void:
 			for id in [&"gear_cog", &"gear_link", &"gear_hub", &"forge_furnace", &"gear_escape", &"gear_core", &"forge_bellows"]:
 				r2.hand.append(id)
 				r2.hand_fresh.append(false)
+	if scene == "event":
+		game.run.phase = RunState.Phase.EVENT
+		game.run.event_id = &"wanderer"
+		game.run.sap = 12
 	if scene == "market":
 		game.run.sap = 30
 		game.run.relics.append(&"dew")

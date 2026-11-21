@@ -259,7 +259,7 @@ func _refresh() -> void:
 		var cv := CardView.make(id)
 		cv.draggable = false
 		cv.custom_minimum_size = Vector2(OFFER_W, OFFER_H)
-		var price := Cards.get_def(id).price
+		var price := run.card_price(id)
 		cv.disabled = run.sap < price
 		cv.note = "%d 养分" % price
 		cv.pressed.connect(_buy.bind(i))
@@ -329,6 +329,8 @@ func _refresh() -> void:
 				hint.text = "芽点：先点一张树上的牌。"
 			else:
 				hint.text = "芽点：点%s周围点亮的一格，芽点就朝那个方向（再点这张牌换一张）。" % Cards.get_def(run.tree.at(port_from).type).display_name
+		_ when run.market_discount < 1.0:
+			hint.text = "流浪商人说到做到：这次集市的牌和器物半价。"
 		_:
 			hint.text = "神树带着现在的形状进入下一季。把鼠标移到格子上查看地块；滚轮缩放，右键拖动平移。"
 
@@ -363,7 +365,7 @@ func _relic_offer(i: int) -> Button:
 	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(col)
 	var n := Label.new()
-	n.text = "%s　%d 养分" % [r.display_name, r.price]
+	n.text = "%s　%d 养分" % [r.display_name, run.relic_price(rid)]
 	n.theme_type_variation = &"TitleLabel"
 	n.add_theme_font_size_override("font_size", 20)
 	n.mouse_filter = Control.MOUSE_FILTER_IGNORE

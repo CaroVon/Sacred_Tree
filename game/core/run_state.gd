@@ -50,6 +50,13 @@ var burned_total: int = 0
 var next_total_mult: float = 1.0
 ## 商会流派：本局在集市累计花费的养分（账本）。
 var spent_total: int = 0
+## 局间事件：当前事件、本局遇到过的事件、刚选完的结果（界面显示用）。
+var event_id: StringName = &""
+var seen_events: Array[StringName] = []
+var event_result: Array[String] = []
+## 事件留下的效果：下次集市的价格倍率、下一季第一回合额外的移栽次数。
+var market_discount: float = 1.0
+var bonus_transplants: int = 0
 ## 最近一次封存释放的总量（界面演出用，不存档）。
 var last_release: int = 0
 ## 平衡模拟用：不因未达标而失败（不存档）。
@@ -849,14 +856,45 @@ func choose_reward(i: int) -> void:
 	var t := reward_options[i]
 	discard.append(t)
 	add_log("获得%s" % Cards.get_def(t).display_name)
-	_open_market()
+	_after_reward()
 
 
 func skip_reward() -> void:
 	if phase != Phase.REWARD:
 		return
 	sap += Rules.SKIP_REWARD_SAP
+	_after_reward()
+
+
+## 选牌之后：一定概率遇到事件，否则直接去集市。
+func _after_reward() -> void:
+	reward_options.clear()
+	var pool := RunEvents.available(self)
+	if not pool.is_empty() and rng.randf() < Rules.EVENT_CHANCE:
+		event_id = pool[rng.randi_range(0, pool.size() - 1)]
+		event_result.clear()
+		phase = Phase.EVENT
+		add_log("遇到事件：%s" % RunEvents.LIST[event_id].title)
+		changed.emit()
+		return
 	_open_market()
+
+
+## 选事件的第 i 个选项；结果写进 event_result，然后进入集市。
+func choose_event(i: int) -> bool:
+	if phase != Phase.EVENT or event_id == &"":
+		return false
+	var opts: Array = RunEvents.LIST[event_id].options
+	if i < 0 or i >= opts.size() or RunEvents.blocked(self, event_id, i) != "":
+		return false
+	event_result = RunEvents.apply(self, opts[i].ops)
+	if event_result.is_empty():
+		event_result.append("什么也没有改变。")
+	seen_events.append(event_id)
+	add_log("%s：%s" % [RunEvents.LIST[event_id].title, "；".join(event_result)])
+	event_id = &""
+	_open_market()
+	return true
 
 
 ## 选器物。槽满时必须指定替换哪一个槽（被替换的器物按出售价返还养分）。
@@ -916,6 +954,9 @@ func _start_season() -> void:
 	relic_options.clear()
 	_collect_cards()
 	_reset_turn()
+	if bonus_transplants > 0:
+		transplants += bonus_transplants
+		bonus_transplants = 0
 	draw()
 
 
@@ -961,19 +1002,29 @@ func relic_sell_price(id: StringName) -> int:
 	return int(floor(Cards.relic(id).price * Rules.RELIC_SELL_RATIO))
 
 
+## 集市里牌与器物的实际价格（事件“流浪商人”可以打折）。
+func card_price(id: StringName) -> int:
+	return maxi(1, int(round(Cards.get_def(id).price * market_discount)))
+
+
+func relic_price(id: StringName) -> int:
+	return maxi(1, int(round(Cards.relic(id).price * market_discount)))
+
+
 func can_buy_relic(i: int) -> bool:
 	return phase == Phase.MARKET and i >= 0 and i < market_relics.size() and not relics_full() \
-		and sap >= Cards.relic(market_relics[i]).price
+		and sap >= relic_price(market_relics[i])
 
 
 func buy_relic(i: int) -> bool:
 	if not can_buy_relic(i):
 		return false
 	var r := market_relics[i]
-	_spend(Cards.relic(r).price)
+	var price := relic_price(r)
+	_spend(price)
 	relics.append(r)
 	market_relics.remove_at(i)
-	add_log("买下器物%s（-%d）" % [Cards.relic(r).display_name, Cards.relic(r).price])
+	add_log("买下器物%s（-%d）" % [Cards.relic(r).display_name, price])
 	changed.emit()
 	return true
 
@@ -1007,7 +1058,7 @@ func buy_card(i: int) -> bool:
 	if phase != Phase.MARKET or i < 0 or i >= market_cards.size():
 		return false
 	var t := market_cards[i]
-	var price := Cards.get_def(t).price
+	var price := card_price(t)
 	if sap < price:
 		return false
 	_spend(price)
@@ -1109,6 +1160,7 @@ func leave_market() -> void:
 		return
 	market_cards.clear()
 	market_relics.clear()
+	market_discount = 1.0
 	if not is_calamity():
 		_next_season()
 		return
@@ -1162,6 +1214,8 @@ func to_dict() -> Dictionary:
 		"next_tip_bonus": next_tip_bonus,
 		"heat": heat, "burned_total": burned_total, "next_total_mult": next_total_mult,
 		"spent_total": spent_total,
+		"event_id": String(event_id), "seen_events": _names(seen_events), "event_result": event_result.duplicate(),
+		"market_discount": market_discount, "bonus_transplants": bonus_transplants,
 		"log": log_lines.duplicate(),
 	}
 
@@ -1203,6 +1257,12 @@ static func from_dict(d: Dictionary) -> RunState:
 	s.burned_total = int(d.get("burned_total", 0))
 	s.next_total_mult = float(d.get("next_total_mult", 1.0))
 	s.spent_total = int(d.get("spent_total", 0))
+	s.event_id = StringName(d.get("event_id", ""))
+	s.seen_events = _ids(d.get("seen_events", []))
+	for l in d.get("event_result", []):
+		s.event_result.append(String(l))
+	s.market_discount = float(d.get("market_discount", 1.0))
+	s.bonus_transplants = int(d.get("bonus_transplants", 0))
 	for l in d.get("log", []):
 		s.log_lines.append(String(l))
 	return s

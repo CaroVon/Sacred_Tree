@@ -144,6 +144,7 @@ func test_year_flow_to_market_and_next_year() -> void:
 		_clear_season(s)
 		check_eq(s.phase, RunState.Phase.REWARD)
 		s.choose_reward(0)
+		_skip_event(s)
 		check_eq(s.phase, RunState.Phase.MARKET, "market after every season")
 		check_eq(s.market_relics.size(), Rules.MARKET_RELIC_OFFERS)
 		s.leave_market()
@@ -181,6 +182,7 @@ func test_win_after_three_years() -> void:
 			_clear_season(s)
 			if s.phase == RunState.Phase.REWARD:
 				s.skip_reward()
+				_skip_event(s)
 			elif s.phase == RunState.Phase.RELIC:
 				s.skip_relic()
 			s.leave_market()
@@ -304,3 +306,10 @@ func test_all_cards_load() -> void:
 	for id in Cards.all_ids():
 		var d := Cards.get_def(id)
 		check(d.display_name != "" and d.desc != "", "card %s incomplete" % id)
+
+
+func _skip_event(s: RunState) -> void:
+	if s.phase == RunState.Phase.EVENT:
+		for i in RunEvents.LIST[s.event_id].options.size():
+			if RunEvents.blocked(s, s.event_id, i) == "" and s.choose_event(i):
+				return

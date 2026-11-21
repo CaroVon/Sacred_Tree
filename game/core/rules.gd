@@ -65,6 +65,8 @@ const CLEAR_ROCK_PRICE := 3
 const MAKE_FERTILE_PRICE := 4
 ## 精炼一张牌的价格。
 const REFINE_PRICE := 6
+## 每季选牌之后遇到局间事件的概率（天灾季之后不触发）。
+const EVENT_CHANCE := 0.5
 ## 抽选时，已有主流派的牌权重倍数。
 const FAMILY_BIAS := 4.0
 

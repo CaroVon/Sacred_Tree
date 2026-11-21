@@ -10,6 +10,7 @@ const SCENES := {
 	&"map": "res://scenes/map/year_map.tscn",
 	&"market": "res://scenes/market/market.tscn",
 	&"codex": "res://scenes/codex/codex.tscn",
+	&"event": "res://scenes/event/event.tscn",
 }
 
 const SETTINGS_PATH := "user://settings.cfg"
@@ -174,6 +175,8 @@ func continue_run() -> void:
 		match r.phase:
 			RunState.Phase.MARKET:
 				goto(&"market")
+			RunState.Phase.EVENT:
+				goto(&"event")
 			RunState.Phase.PLAY:
 				goto(&"map" if r.turn == 1 and r.score == 0 else &"season")
 			_:

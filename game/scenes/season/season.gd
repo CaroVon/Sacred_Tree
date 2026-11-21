@@ -1207,6 +1207,8 @@ func _show_phase_modal() -> void:
 				"天灾季累计 %d / %d，得 %d 养分。选一件器物，然后进入集市。" % [run.score, run.target(), Rules.CALAMITY_CLEAR_SAP], btns)
 		RunState.Phase.MARKET:
 			Game.goto(&"market")
+		RunState.Phase.EVENT:
+			Game.goto(&"event")
 		RunState.Phase.LOST:
 			_open_modal("这一季没有达标", "%s累计 %d，目标 %d。神树停止了生长。" % [run.season_label(), run.score, run.target()],
 				[{"label": "重新开始", "fn": func(): Game.new_run(), "primary": true}, {"label": "导出神树版画", "fn": _export_print}, {"label": "主菜单", "fn": func(): Game.goto(&"menu")}])
@@ -1358,7 +1360,7 @@ func _skip_relic() -> void:
 func _after_season() -> void:
 	modal.visible = false
 	Game.save()
-	Game.goto(&"market")
+	Game.goto(&"event" if run.phase == RunState.Phase.EVENT else &"market")
 
 
 ## 把牌桌截成一张“神树版画”，存到 user://prints 并打开文件夹。

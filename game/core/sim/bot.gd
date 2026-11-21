@@ -60,6 +60,8 @@ func run_game(run_seed: int, ignore_targets: bool = false) -> Dictionary:
 						"target": Rules.target(se, y), "passed": s.score >= Rules.target(se, y)})
 			RunState.Phase.DISCARD:
 				_discard(s)
+			RunState.Phase.EVENT:
+				_choose_event(s)
 			RunState.Phase.REWARD:
 				_choose_reward(s)
 			RunState.Phase.RELIC:
@@ -192,6 +194,24 @@ func _choose_relic(s: RunState) -> void:
 		s.choose_relic(best, worst)
 	else:
 		s.skip_relic()
+
+
+## 事件：选第一个能选、且不会加入债务的选项（都不行就选第一个能选的）。
+func _choose_event(s: RunState) -> void:
+	var opts: Array = RunEvents.LIST[s.event_id].options
+	var pick := -1
+	for i in opts.size():
+		if RunEvents.blocked(s, s.event_id, i) != "":
+			continue
+		var debt: bool = opts[i].ops.any(func(o): return o.get("id", "") == "curse_debt")
+		if not debt:
+			pick = i
+			break
+		if pick < 0:
+			pick = i
+	if pick < 0:
+		pick = opts.size() - 1
+	s.choose_event(pick)
 
 
 ## 弃牌：先弃偏好最低的牌。

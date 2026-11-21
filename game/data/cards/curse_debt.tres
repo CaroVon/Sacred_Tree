@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="CardDef" format=3]
+
+[ext_resource type="Script" path="res://core/card_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"curse_debt"
+display_name = "债务"
+category = 6
+ports = PackedInt32Array()
+effect = 4
+value = 2.0
+prune_value = 0
+color_key = &"grey"
+in_reward_pool = false
+price = 0
+exhaust_on_prune = true
+desc = "−2，末端；剪掉时不得养分，燃尽（本季不再回来）。可以在集市删去"
