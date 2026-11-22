@@ -110,6 +110,4 @@ func _draw() -> void:
 
 
 static func _short(v: int) -> String:
-	if v >= 10000:
-		return "%s万" % Pulse.num(snappedf(v / 10000.0, 0.1))
-	return str(v)
+	return Pulse.big(v)

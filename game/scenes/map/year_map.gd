@@ -109,7 +109,10 @@ func _ready() -> void:
 	ids.sort()
 	for id in ids:
 		deck_parts.append("%s×%d" % [Cards.get_def(id).display_name, counts[id]])
-	info.text = "养分储备 %d\n器物：%s\n牌组（%d 张）：%s" % [run.sap, rel, run.deck.size() + run.discard.size() + run.hand.size(), "  ".join(deck_parts)]
+	var on_tree := run.tree.size() - 1
+	info.text = "养分储备 %d\n器物：%s\n牌组 %d 张（树上 %d 张，手里和牌堆 %d 张）：%s\n\n地块：%s" % [run.sap, rel,
+		on_tree + run.deck.size() + run.discard.size() + run.hand.size(), on_tree, run.deck.size() + run.discard.size() + run.hand.size(),
+		"  ".join(deck_parts), Land.legend()]
 	if not Game.notices.is_empty():
 		info.text = "★ " + "\n★ ".join(Game.notices) + "\n\n" + info.text
 		Game.notices.clear()

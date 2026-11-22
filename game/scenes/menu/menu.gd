@@ -26,6 +26,7 @@ func _ready() -> void:
 	_tree = _run.tree
 	_order = Showcase.order_of(_tree)
 	board = Board3D.new()
+	board.auto_frame = false
 	board.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	board.margins = Vector4(780, 70, 60, 70)
 	board.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -224,7 +225,7 @@ func _pick_starter() -> void:
 		n.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		v.add_child(n)
 		var fam := Label.new()
-		fam.text = " · ".join(st.families.map(func(f): return CardDef.FAMILY_NAMES.get(f, String(f))))
+		fam.text = " · ".join(st.families.map(func(f): return CardDef.FAMILY_NAMES.get(f, String(f)) + ("" if f == &"wood" or Game.profile.has_family(f) else "（未解锁）")))
 		fam.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		fam.add_theme_color_override("font_color", Palette.family_color(st.families[0]) if not st.families.is_empty() else Palette.OLIVE)
 		v.add_child(fam)

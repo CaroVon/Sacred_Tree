@@ -673,11 +673,20 @@ static func to_int(f: float) -> int:
 	return int(floor(clampf(f, -SCORE_CAP, SCORE_CAP)))
 
 
-## 大数显示：100 万以下写整数，以上写科学计数法（三位有效数字，如 3.27e8）。
+## 大数显示：1 万以下写整数；1 万到 1 亿写「万」（三位有效数字，如 2.4万、200万）；
+## 1 亿以上写科学计数法（三位有效数字，如 3.27e8）。
 static func big(v: float) -> String:
-	if absf(v) < 1000000.0:
+	var a := absf(v)
+	if a < 10000.0:
 		return str(int(v))
-	var e := int(floor(log(absf(v)) / log(10.0)))
+	if a < 100000000.0:
+		var w := v / 10000.0
+		var digits := 2 if absf(w) < 10.0 else (1 if absf(w) < 100.0 else 0)
+		var t := ("%." + str(digits) + "f") % w
+		if t.contains("."):
+			t = t.rstrip("0").rstrip(".")
+		return t + "万"
+	var e := int(floor(log(a) / log(10.0)))
 	var m := v / pow(10.0, e)
 	if absf(m) >= 9.995:
 		m /= 10.0

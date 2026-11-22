@@ -46,6 +46,13 @@ const LEGEND_CHOICES := 3
 ## 传说之选是否每年都有（否则只在第 1 年天灾之后）。
 const LEGEND_EVERY_YEAR := false
 const RELIC_SLOTS := 6
+## 每到新的一年，树心自动多长 1 个芽点（防止树长满后无处可放）。
+const SEED_PORT_PER_YEAR := 1
+## 空芽点少于这个数时，季末选牌保证至少一张能分枝的牌。
+const LOW_BUDS := 2
+## 超额奖励：本季累计达到目标的 10 倍、100 倍、1000 倍……每一档多得这么多养分（最多 3 档）。
+const OVERKILL_SAP := 2
+const OVERKILL_MAX_TIERS := 3
 const RELIC_SELL_RATIO := 0.5
 
 const START_DECK := {
@@ -80,6 +87,8 @@ const REFINE_PRICE := 6
 const EVENT_CHANCE := 0.5
 ## 抽选时，已有主流派的牌权重倍数。
 const FAMILY_BIAS := 4.0
+## 一个新流派至少有这么多张牌（牌组加牌桌）才算主流派；都不够时古木算主流派。
+const MAIN_FAMILY_MIN := 3
 
 
 static func radius_for_year(year: int) -> int:

@@ -33,6 +33,17 @@ var note_alert: bool = false:
 		note_alert = v
 		queue_redraw()
 var draggable: bool = true
+## 手牌收起时在牌顶写名字（0..1 透明度），否则名字会被屏幕底边挡住。
+var name_on_top: float = 0.0:
+	set(v):
+		if absf(v - name_on_top) > 0.01:
+			name_on_top = v
+			queue_redraw()
+## 牌下方留多高写效果说明（0 = 不写，只在悬停提示里看）。
+var desc_h: float = 0.0:
+	set(v):
+		desc_h = v
+		queue_redraw()
 ## 牌背朝上（抽牌翻面动画的前半段）。
 var show_back: bool = false:
 	set(v):
@@ -133,12 +144,16 @@ func _draw() -> void:
 	if compact:
 		_draw_compact(def, accent)
 		return
+	# 牌下方的效果说明（奖励、集市这些要做决定的地方用）
+	var csize := Vector2(size.x, size.y - desc_h)
+	if desc_h > 0.0:
+		_draw_desc(def, Rect2(0, csize.y + 6.0, size.x, desc_h - 6.0))
 
 	# 等比缩放系数
-	var k: float = size.x / W
+	var k: float = csize.x / W
 	# 图版尽量按 3:4 竖版填满宽度，题名带留够空间
-	var art_h: float = minf(size.x * ART_ASPECT, size.y - BAND_MIN * k)
-	var band: float = size.y - art_h
+	var art_h: float = minf(csize.x * ART_ASPECT, csize.y - BAND_MIN * k)
+	var band: float = csize.y - art_h
 
 	var hover_t: float = 1.0 if is_hovered() and not disabled else 0.0
 	var sel_t: float = 1.0 if selected else 0.0
@@ -153,22 +168,22 @@ func _draw() -> void:
 		sx = 1.0 + 0.09 * st
 		sy = 1.0 - 0.11 * st
 
-	draw_set_transform(Vector2(size.x * 0.5, y), tilt, Vector2(sx, sy))
-	var o := Vector2(-size.x * 0.5, -y)
-	var r := Rect2(o, size)
+	draw_set_transform(Vector2(csize.x * 0.5, y), tilt, Vector2(sx, sy))
+	var o := Vector2(-csize.x * 0.5, -y)
+	var r := Rect2(o, csize)
 
 	# 卡片底：奶油石板
 	draw_rect(r, Palette.SHEET)
 
 	# ---------- 上部：印刷图版 ----------
-	var art_rect := Rect2(o.x, o.y, size.x, art_h)
+	var art_rect := Rect2(o.x, o.y, csize.x, art_h)
 	CardArt.draw_plate(self, def.art_id(), art_rect)
 	# 图版与题名带之间的细金线
 	draw_line(Vector2(o.x, art_rect.position.y + art_rect.size.y),
-		Vector2(o.x + size.x, art_rect.position.y + art_rect.size.y), Palette.GOLD, maxf(1.0, 1.5 * k))
+		Vector2(o.x + csize.x, art_rect.position.y + art_rect.size.y), Palette.GOLD, maxf(1.0, 1.5 * k))
 
 	# ---------- 下部：题名带 ----------
-	var band_rect := Rect2(o.x, art_rect.position.y + art_rect.size.y, size.x, size.y - art_h)
+	var band_rect := Rect2(o.x, art_rect.position.y + art_rect.size.y, csize.x, csize.y - art_h)
 	draw_rect(band_rect, Palette.SHEET)
 	PrintStyle.halftone(self, band_rect.grow(-2.0 * k), Color(Palette.INK, 0.035), 6.0 * k, 1.0 * k, 45.0)
 
@@ -176,12 +191,12 @@ func _draw() -> void:
 	var name_fs := int(round(24.0 * k))
 	var tsz := title.get_string_size(def.display_name, HORIZONTAL_ALIGNMENT_LEFT, -1, name_fs)
 	var name_y := band_rect.position.y + 30.0 * k
-	draw_string(title, Vector2(o.x + (size.x - tsz.x) * 0.5, name_y), def.display_name,
+	draw_string(title, Vector2(o.x + (csize.x - tsz.x) * 0.5, name_y), def.display_name,
 		HORIZONTAL_ALIGNMENT_LEFT, -1, name_fs, Palette.INK)
 	# 牌名两侧的菱形饰纹
 	var dia := maxf(2.5, 4.0 * k)
 	for sgn: float in [-1.0, 1.0]:
-		var dx := o.x + size.x * 0.5 + sgn * (tsz.x * 0.5 + 14.0 * k)
+		var dx := o.x + csize.x * 0.5 + sgn * (tsz.x * 0.5 + 14.0 * k)
 		var dy := name_y - 8.0 * k
 		draw_colored_polygon(PackedVector2Array([
 			Vector2(dx, dy - dia), Vector2(dx + dia, dy), Vector2(dx, dy + dia), Vector2(dx - dia, dy)]),
@@ -193,7 +208,7 @@ func _draw() -> void:
 		var vf := Palette.numeric()
 		var vfs := int(round(17.0 * k))
 		var vsz := vf.get_string_size(vtext, HORIZONTAL_ALIGNMENT_LEFT, -1, vfs)
-		draw_string(vf, Vector2(o.x + size.x - 11.0 * k - vsz.x, name_y), vtext,
+		draw_string(vf, Vector2(o.x + csize.x - 11.0 * k - vsz.x, name_y), vtext,
 			HORIZONTAL_ALIGNMENT_LEFT, -1, vfs, accent)
 
 	# 第二行：分类铭牌（或者「为什么不能出」的提示）
@@ -204,7 +219,7 @@ func _draw() -> void:
 		var tag := "暂不可用"
 		var tfs := int(round(12.0 * k))
 		var tsz2 := body.get_string_size(tag, HORIZONTAL_ALIGNMENT_LEFT, -1, tfs)
-		var plaque := Rect2(o.x + (size.x - tsz2.x - 16.0 * k) * 0.5, sub_y - 13.0 * k,
+		var plaque := Rect2(o.x + (csize.x - tsz2.x - 16.0 * k) * 0.5, sub_y - 13.0 * k,
 			tsz2.x + 16.0 * k, 18.0 * k)
 		draw_rect(plaque, Color(Palette.TERRA, 0.16))
 		draw_rect(plaque, Color(Palette.TERRA, 0.7), false, maxf(1.0, 1.0 * k))
@@ -212,9 +227,9 @@ func _draw() -> void:
 			HORIZONTAL_ALIGNMENT_LEFT, -1, tfs, Palette.TERRA)
 	elif note != "":
 		var ncol := Palette.TERRA if note_alert else Palette.OLIVE
-		draw_rect(Rect2(o.x, sub_y - 13.0 * k, size.x, 20.0 * k), Color(ncol, 0.12))
+		draw_rect(Rect2(o.x, sub_y - 13.0 * k, csize.x, 20.0 * k), Color(ncol, 0.12))
 		draw_string(body, Vector2(o.x + 11.0 * k, sub_y), note,
-			HORIZONTAL_ALIGNMENT_LEFT, size.x - 22.0 * k, int(round(12.0 * k)), ncol)
+			HORIZONTAL_ALIGNMENT_LEFT, csize.x - 22.0 * k, int(round(12.0 * k)), ncol)
 	else:
 		# 新流派显示流派名（流派色）；木系显示类别
 		var cat := def.category_name() if def.family.is_empty() else def.family_label()
@@ -222,7 +237,7 @@ func _draw() -> void:
 			accent = Palette.family_color(def.families()[0])
 		var cat_fs := int(round(12.0 * k))
 		var csz := body.get_string_size(cat, HORIZONTAL_ALIGNMENT_LEFT, -1, cat_fs)
-		var plaque := Rect2(o.x + (size.x - csz.x - 16.0 * k) * 0.5, sub_y - 13.0 * k,
+		var plaque := Rect2(o.x + (csize.x - csz.x - 16.0 * k) * 0.5, sub_y - 13.0 * k,
 			csz.x + 16.0 * k, 18.0 * k)
 		draw_rect(plaque, Color(accent, 0.16))
 		draw_rect(plaque, Color(accent, 0.65), false, maxf(1.0, 1.0 * k))
@@ -238,14 +253,14 @@ func _draw() -> void:
 				"嫁接", HORIZONTAL_ALIGNMENT_LEFT, -1, int(round(12.0 * k)), accent)
 		# 稀有度（右下角）：稀有一枚、传说两枚金色菱形
 		for i in def.rarity:
-			var c := Vector2(o.x + size.x - (12.0 + i * 11.0) * k, band_rect.position.y + band_rect.size.y - 11.0 * k)
+			var c := Vector2(o.x + csize.x - (12.0 + i * 11.0) * k, band_rect.position.y + band_rect.size.y - 11.0 * k)
 			var d := maxf(3.0, 4.2 * k)
 			draw_colored_polygon(PackedVector2Array([c + Vector2(0, -d), c + Vector2(d, 0), c + Vector2(0, d), c + Vector2(-d, 0)]),
 				Palette.GOLD if def.rarity >= 2 else Palette.STONE)
 
 	# ---------- 边框与角饰 ----------
-	_draw_frame(o, size, accent, up, k)
-	_draw_rarity(o, size, def.rarity, k)
+	_draw_frame(o, csize, accent, up, k)
+	_draw_rarity(o, csize, def.rarity, k)
 
 	# ---------- 左上角序号 ----------
 	if index >= 0 and index < 9:
@@ -253,13 +268,42 @@ func _draw() -> void:
 
 	if disabled:
 		# 整张卡退成一层淡影，题名带上的小红牌说明原因
-		draw_rect(Rect2(o.x, art_rect.position.y, size.x, art_h), Color(Palette.PAPER, 0.42))
+		draw_rect(Rect2(o.x, art_rect.position.y, csize.x, art_h), Color(Palette.PAPER, 0.42))
 		draw_rect(r, Color(Palette.PAPER, 0.18))
 
 	if has_focus():
-		PrintStyle.dashed_rect(self, Rect2(o - Vector2(4, 4), size + Vector2(8, 8)), Palette.WATER, 2.0, 7.0)
+		PrintStyle.dashed_rect(self, Rect2(o - Vector2(4, 4), csize + Vector2(8, 8)), Palette.WATER, 2.0, 7.0)
+
+	# 选中：金色粗框
+	if selected:
+		draw_rect(Rect2(o - Vector2(3, 3), csize + Vector2(6, 6)), Palette.GOLD, false, maxf(3.0, 4.0 * k))
+
+	# 收起时牌顶的名字条
+	if name_on_top > 0.01:
+		var strip := Rect2(o.x, o.y, csize.x, 30.0 * k)
+		draw_rect(strip, Color(Palette.SHEET, 0.94 * name_on_top))
+		draw_line(strip.position + Vector2(0, strip.size.y), strip.end, Color(Palette.GOLD, name_on_top), maxf(1.0, 1.5 * k))
+		var nf := Palette.title_for(def.display_name)
+		var nfs := int(round(19.0 * k))
+		var label := def.display_name + ("  " + _value_text(def) if _value_text(def) != "" else "")
+		var nsz := nf.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, nfs)
+		draw_string(nf, Vector2(o.x + (csize.x - nsz.x) * 0.5, o.y + 22.0 * k), label, HORIZONTAL_ALIGNMENT_LEFT, -1, nfs,
+			Color(Palette.TERRA if disabled else Palette.INK, name_on_top))
 
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+## 效果说明：一块浅底，写完整的效果文字。
+func _draw_desc(def: CardDef, rect: Rect2) -> void:
+	draw_rect(rect, Color(Palette.SHEET, 0.92))
+	draw_rect(rect, Color(Palette.INK, 0.25), false, 1.0)
+	var f := Palette.body()
+	var fs := 16
+	var txt := def.desc
+	if def.rarity >= 2:
+		txt = "【传说】" + txt
+	draw_multiline_string(f, rect.position + Vector2(8, 4 + fs), txt, HORIZONTAL_ALIGNMENT_LEFT,
+		rect.size.x - 16, fs, int((rect.size.y - 6) / (fs + 4)), Palette.INK)
 
 
 ## 紧凑版（图鉴）：博物馆展签——衬纸里装一幅图版，下面一块展签写牌名和类别。
@@ -339,11 +383,11 @@ func _draw_frame(o: Vector2, sz: Vector2, accent: Color, up: float, k: float) ->
 func _value_text(def: CardDef) -> String:
 	match def.effect:
 		CardDef.Effect.ADD:
-			return "+%s" % Pulse.num(def.value)
+			return "" if def.value == 0.0 else "+%s" % Pulse.num(def.value)
 		CardDef.Effect.ADD_DEPTH:
 			return "+深度"
 		CardDef.Effect.MUL:
-			return "×%s" % Pulse.num(def.value)
+			return "" if def.value == 1.0 else "×%s" % Pulse.num(def.value)
 		CardDef.Effect.SUB_CLAMP:
 			return "−%s" % Pulse.num(def.value)
 		CardDef.Effect.GRAFT:

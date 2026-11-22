@@ -146,10 +146,13 @@ func test_targets_gradient() -> void:
 
 
 func test_big_number_format() -> void:
-	check_eq(Pulse.big(999999), "999999")
-	check_eq(Pulse.big(1000000), "1.00e6")
+	check_eq(Pulse.big(9999), "9999")
+	check_eq(Pulse.big(24000), "2.4万")
+	check_eq(Pulse.big(123456), "12.3万")
+	check_eq(Pulse.big(2000000), "200万")
+	check_eq(Pulse.big(99990000), "9999万")
 	check_eq(Pulse.big(327000000), "3.27e8")
-	check_eq(Pulse.big(9999000), "1.00e7")
+	check_eq(Pulse.big(9999000000), "1.00e10")
 	check_eq(Pulse.to_int(1e30), Pulse.SCORE_CAP)
 	check(Pulse.to_int(1e30) > 0)
 
@@ -187,8 +190,9 @@ func test_year_flow_to_market_and_next_year() -> void:
 	_clear_season(s)
 	check_eq(s.phase, RunState.Phase.RELIC)
 	check_eq(s.relic_options.size(), Rules.RELIC_CHOICES)
+	var relics_before := s.relics.size()
 	s.choose_relic(0)
-	check_eq(s.relics.size(), 1)
+	check_eq(s.relics.size(), relics_before + 1)
 	check_eq(s.phase, RunState.Phase.REWARD, "legend pick after relic")
 	check(s.legend_reward, "legend pick")
 	s.skip_reward()

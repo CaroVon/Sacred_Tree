@@ -133,6 +133,7 @@ func _choose(i: int) -> void:
 		l.text = "· " + line
 		l.add_theme_font_size_override("font_size", 21)
 		l.add_theme_color_override("font_color", Palette.INK)
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		opts_box.add_child(l)
 	(page_col.get_node("Sap") as Label).text = "养分 %d · 器物 %d/%d" % [run.sap, run.relics.size(), Rules.RELIC_SLOTS]
 	var go := Button.new()

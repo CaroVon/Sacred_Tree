@@ -129,6 +129,7 @@ func _ready() -> void:
 	bbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	board_col.add_child(bbox)
 	board = Board3D.new()
+	board.set("auto_frame", false)
 	board.custom_minimum_size = Vector2(0, 420)
 	# 图鉴里示例树频繁切换，不播落下/飞走动画
 	board.animate_changes = false

@@ -31,6 +31,8 @@ var flash: Dictionary = {}         # Vector2i -> int（上次脉动的末梢收�
 var node_pick: Dictionary = {}     # Vector2i -> true（集市里可选的牌）
 ## 放置预览：末梢收获的变化（格子 -> 增减）。
 var delta: Dictionary = {}
+## 警示标记：Vector2i -> 短文字（冬季将枯萎的末梢「枯」、刚被天灾打中的格子「灾」）。
+var warn: Dictionary = {}
 ## 选中手牌悬停目标格时画的半透明预览牌。
 var ghost_type: StringName = &""
 var show_buds: bool = true
@@ -432,7 +434,7 @@ func _draw() -> void:
 				_text_outlined(title, p + Vector2(0, -s + 2 * k - rise), "+%s" % Pulse.big(pulse.contrib[n.key]),
 					int((18 + 6 * clampf(1.0 - dt * 3.0, 0.0, 1.0)) * k), Palette.TERRA)
 		elif flash.has(n.key) and not tracing:
-			_text_outlined(body, p + Vector2(0, -s + 6 * k), "+%d" % flash[n.key], int(16 * k), Palette.TERRA)
+			_text_outlined(body, p + Vector2(0, -s + 6 * k), "+%s" % Pulse.big(flash[n.key]), int(16 * k), Palette.TERRA)
 		if n.key == _blink and _blink_t > 0.0:
 			_hex_outline(p, s + 2, Color(Palette.OCHRE, _blink_t), 5.0 * k)
 
@@ -447,7 +449,7 @@ func _draw() -> void:
 			if d == 0:
 				continue
 			var col := Palette.OLIVE.darkened(0.15) if d > 0 else Palette.TERRA.darkened(0.05)
-			_pill(center_of(c) + Vector2(0, -s * 0.98), ("+%d" if d > 0 else "−%d") % absi(d), int(14 * k), col, Color(Palette.SHEET, 0.96))
+			_pill(center_of(c) + Vector2(0, -s * 0.98), ("+%s" if d > 0 else "−%s") % Pulse.big(absi(d)), int(14 * k), col, Color(Palette.SHEET, 0.96))
 
 	# ---------- 预览牌 ----------
 	var gt := drag_type if drag_type != &"" else ghost_type
@@ -643,7 +645,7 @@ func _draw_seed(p: Vector2, s: float, k: float, v: int) -> void:
 	_text(title, p + Vector2(0, 5 * k), "种", int(19 * k), Palette.CREAM)
 	if show_labels:
 		_text_outlined(body, p + Vector2(0, -12 * k), "输出", int(9 * k), Palette.INK)
-	_text_outlined(body, p + Vector2(0, 18 * k), str(v), int(12 * k), Palette.INK)
+	_text_outlined(body, p + Vector2(0, 18 * k), Pulse.big(v), int(12 * k), Palette.INK)
 
 
 ## 树上的一张牌：图版缩略 + 类别色环 + 名字。
@@ -690,7 +692,7 @@ func _draw_node(n: TreeNode, p: Vector2, s: float, k: float, v: int, is_tip: boo
 	if is_tip and pulse and pulse.contrib.has(n.key) and (anim_t < 0.0 or reached >= n.depth):
 		_text_outlined(body, p + Vector2(0, 18 * k), "收 %s" % Pulse.big(pulse.contrib[n.key]), int(11 * k), Palette.TERRA)
 	else:
-		_text_outlined(body, p + Vector2(0, 18 * k), str(v), int(11 * k), Palette.INK)
+		_text_outlined(body, p + Vector2(0, 18 * k), Pulse.big(v), int(11 * k), Palette.INK)
 
 
 ## 悬停路径：其余部分变淡，路径上每张牌冒出这一步的算式。

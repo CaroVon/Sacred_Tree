@@ -24,6 +24,10 @@ var refine_box: HFlowContainer
 const PANEL_W := 900.0
 const OFFER_W := 150.0
 const OFFER_H := 255.0
+var tabs: TabBar
+var _tab_nodes: Array = []
+## 集市卖的牌下方写效果说明的高度。
+const OFFER_DESC_H := 128.0
 
 var deck_pile: PileView
 var fly_layer: Control
@@ -120,6 +124,14 @@ func _ready() -> void:
 	page.add_child(outer)
 	var head := HBoxContainer.new()
 	outer.add_child(head)
+	# 分页：买牌与器物 / 树的服务 / 删牌与精炼（一屏只放一类，不再是一条长列表）
+	tabs = TabBar.new()
+	tabs.add_tab("牌与器物")
+	tabs.add_tab("树的服务")
+	tabs.add_tab("删牌与精炼")
+	tabs.add_theme_font_size_override("font_size", 20)
+	tabs.tab_changed.connect(func(_i): _apply_tab())
+	outer.add_child(tabs)
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -157,10 +169,10 @@ func _ready() -> void:
 
 	right.add_child(_heading("买牌"))
 	var shelf := Control.new()
-	shelf.custom_minimum_size = Vector2(0, OFFER_H + 26)
+	shelf.custom_minimum_size = Vector2(0, OFFER_H + OFFER_DESC_H + 26)
 	shelf.draw.connect(func():
 		# 石台：牌立在一条带金边的石条上
-		var y := OFFER_H + 6.0
+		var y := OFFER_H + OFFER_DESC_H + 6.0
 		shelf.draw_rect(Rect2(0, y, shelf.size.x, 14), Palette.CELL.darkened(0.06))
 		shelf.draw_line(Vector2(0, y), Vector2(shelf.size.x, y), Palette.GOLD, 2.0)
 		shelf.draw_rect(Rect2(0, y + 14, shelf.size.x, 5), Color(Palette.INK, 0.18)))
@@ -200,11 +212,28 @@ func _ready() -> void:
 	leave.pressed.connect(_leave)
 	outer.add_child(leave)
 
+	# 按小标题把摊位分成三页
+	var group := 0
+	for ch in right.get_children():
+		if ch is Label and (ch.text.begins_with("年轮") or ch.text.begins_with("删牌")):
+			group = 1 if ch.text.begins_with("年轮") else 2
+		_tab_nodes.append([ch, group])
+	if run.free_buds() < Rules.LOW_BUDS:
+		tabs.current_tab = 0
+		tabs.set_tab_title(1, "树的服务（推荐：芽点）")
+	_apply_tab()
+
 	fly_layer = Control.new()
 	fly_layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	fly_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(fly_layer)
 	_refresh()
+
+
+func _apply_tab() -> void:
+	for pair in _tab_nodes:
+		if is_instance_valid(pair[0]):
+			pair[0].visible = int(pair[1]) == tabs.current_tab
 
 
 func _heading(t: String) -> Label:
@@ -258,7 +287,8 @@ func _refresh() -> void:
 		var id := run.market_cards[i]
 		var cv := CardView.make(id)
 		cv.draggable = false
-		cv.custom_minimum_size = Vector2(OFFER_W, OFFER_H)
+		cv.desc_h = OFFER_DESC_H
+		cv.custom_minimum_size = Vector2(OFFER_W, OFFER_H + OFFER_DESC_H)
 		var price := run.card_price(id)
 		cv.disabled = run.sap < price
 		cv.note = "%d 养分" % price
@@ -287,8 +317,11 @@ func _refresh() -> void:
 		var mp := run.service_price(int(info.price))
 		_service("年轮「%s」（%d）：%s" % [info.name, mp, info.desc], run.sap >= mp,
 			pick == Pick.MARK and pick_mark == m, _start_pick.bind(Pick.MARK, m))
-	_service("芽点（%d）：选一张牌，再选一个方向，给它多加一个芽点（每张最多 %d 个）" % [run.service_price(Rules.PORT_PRICE), Rules.MAX_EXTRA_PORTS],
+	var low := run.free_buds() < Rules.LOW_BUDS
+	var pb := _service(("★ 推荐（树上只剩 %d 个空芽点）· " % run.free_buds() if low else "") + "芽点（%d）：选一张牌，再选一个方向，给它多加一个芽点（每张最多 %d 个）" % [run.service_price(Rules.PORT_PRICE), Rules.MAX_EXTRA_PORTS],
 		run.sap >= run.service_price(Rules.PORT_PRICE), pick == Pick.PORT, _start_pick.bind(Pick.PORT, &""))
+	if low:
+		services.move_child(pb, 0)
 	_service("清除岩石（%d）：把一块岩石变回平地" % run.service_price(Rules.CLEAR_ROCK_PRICE), run.sap >= run.service_price(Rules.CLEAR_ROCK_PRICE),
 		pick == Pick.CLEAR_ROCK, _start_pick.bind(Pick.CLEAR_ROCK, &""))
 	_service("养成沃土（%d）：%s" % [run.service_price(Rules.MAKE_FERTILE_PRICE), Land.desc_of(Land.Type.FERTILE)], run.sap >= run.service_price(Rules.MAKE_FERTILE_PRICE),
@@ -394,7 +427,7 @@ func _sell_relic(i: int) -> void:
 		_refresh()
 
 
-func _service(text: String, enabled: bool, active: bool, fn: Callable) -> void:
+func _service(text: String, enabled: bool, active: bool, fn: Callable) -> Button:
 	var b := Button.new()
 	b.text = text
 	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -402,6 +435,7 @@ func _service(text: String, enabled: bool, active: bool, fn: Callable) -> void:
 	b.theme_type_variation = &"ActiveButton" if active else &""
 	b.pressed.connect(fn)
 	services.add_child(b)
+	return b
 
 
 func _start_pick(mode: Pick, mark: StringName) -> void:

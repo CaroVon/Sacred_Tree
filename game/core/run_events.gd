@@ -193,7 +193,7 @@ static func _op(run: RunState, o: Dictionary) -> Array[String]:
 				var id: StringName = StringName(o.id) if o.has("id") else _pick_card(run, String(o.get("pick", "random")))
 				if id != &"":
 					run.deck.append(id)
-					out.append("得到%s" % Cards.get_def(id).display_name)
+					out.append("得到%s（%s）" % [Cards.get_def(id).display_name, Cards.get_def(id).desc])
 		"remove_basic":
 			for i in int(o.n):
 				var t := _find_basic(run)
@@ -205,11 +205,15 @@ static func _op(run: RunState, o: Dictionary) -> Array[String]:
 			for i in int(o.n):
 				var t := _find_basic(run)
 				var nid := _pick_card(run, "top")
-				if t == &"" or nid == &"":
+				for _try in 6:
+					if nid != t:
+						break
+					nid = _pick_card(run, "top")
+				if t == &"" or nid == &"" or nid == t:
 					break
 				_remove_one(run, t)
 				run.deck.append(nid)
-				out.append("%s变成了%s" % [Cards.get_def(t).display_name, Cards.get_def(nid).display_name])
+				out.append("%s变成了%s（%s）" % [Cards.get_def(t).display_name, Cards.get_def(nid).display_name, Cards.get_def(nid).desc])
 		"duplicate":
 			var best := &""
 			for t in run.deck_counts():
@@ -246,7 +250,7 @@ static func _op(run: RunState, o: Dictionary) -> Array[String]:
 			else:
 				var r: StringName = pool[run.rng.randi_range(0, pool.size() - 1)]
 				run.relics.append(r)
-				out.append("得到器物：%s" % Cards.relic(r).display_name)
+				out.append("得到器物：%s（%s）" % [Cards.relic(r).display_name, Cards.relic(r).desc])
 		"lose_relic":
 			if not run.relics.is_empty():
 				var cheap := 0
@@ -333,7 +337,7 @@ static func _pick_card(run: RunState, pick: String) -> StringName:
 			"legendary":
 				ok = d.rarity == 2
 			"top":
-				ok = top.is_empty() or d.has_family(top[0])
+				ok = (top.is_empty() or d.has_family(top[0])) and d.category != CardDef.Category.PRUNE
 			_:
 				if pick.begins_with("family:"):
 					ok = d.has_family(StringName(pick.substr(7)))

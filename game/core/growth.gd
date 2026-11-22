@@ -18,6 +18,9 @@ static func ports_of(n: TreeNode, ctx: Pulse.Context = null) -> Array[int]:
 		out = SEED_PORTS.duplicate()
 		if ctx and ctx.seed_extra_port:
 			out.append(0)
+		for d in n.extra_ports:
+			if not out.has(d):
+				out.append(d)
 		return out
 	var base := n.facing if n.facing >= 0 else 0
 	for p in n.def().ports:

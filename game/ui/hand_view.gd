@@ -17,7 +17,7 @@ const CARD_H := 255.0
 const HOVER_SCALE := 1.22
 const HOVER_LIFT := 40.0
 ## 静止时牌底离屏幕底边的距离。
-const REST_GAP := 10.0
+const REST_GAP := 34.0
 ## 牌与牌之间最大的间距、扇形每张的倾角（弧度）。
 const MAX_SPACING := 150.0
 const FAN_ROT := 0.042
@@ -257,8 +257,8 @@ func _target(i: int) -> Array:
 			var d := i - _hover
 			x += signf(d) * 34.0 / absf(d)
 	if cv.selected and i != _hover:
-		y -= 26.0
-		rot *= 0.5
+		y -= 60.0 - TUCK * Fx.ease_in_out(_tuck) * 0.6
+		rot = 0.0
 	return [Vector2(x, y), rot, scl]
 
 
@@ -288,6 +288,8 @@ func _process(dt: float) -> void:
 		_tuck = 1.0 if want else 0.0
 	else:
 		_tuck = move_toward(_tuck, 1.0 if want else 0.0, dt * (5.0 if want else 8.0))
+	for i in _slots.size():
+		_slots[i].cv.name_on_top = _tuck if i != _hover else 0.0
 	for i in _slots.size():
 		var s := _slots[i]
 		var tg := _target(i)

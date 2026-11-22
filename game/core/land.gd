@@ -38,6 +38,17 @@ static func desc_of(t: int) -> String:
 	return DESCS[t]
 
 
+## 地块图例（一行文字，界面用）。
+const LOOKS := ["", "棕黄土块", "灰色碎石", "青绿水纹", "蓝色矿纹", "红色熔岩", "星光井口", "金色沙地"]
+
+
+static func legend() -> String:
+	var parts: Array[String] = []
+	for t in range(1, NAMES.size()):
+		parts.append("%s（%s）%s" % [NAMES[t], LOOKS[t], desc_of(t)])
+	return "；".join(parts)
+
+
 static func blocks_growth(t: int) -> bool:
 	return t == Type.ROCK or t == Type.SPRING
 

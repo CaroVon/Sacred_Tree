@@ -433,13 +433,13 @@ static func standee_height(n: TreeNode) -> float:
 	if n.is_seed():
 		return 2.4
 	match n.def().category:
-		CardDef.Category.END: return 1.85
-		CardDef.Category.AURA: return 1.85
-		CardDef.Category.GRAFT: return 1.7
-		CardDef.Category.BRANCH: return 1.6
-		CardDef.Category.TIME: return 1.6
-		CardDef.Category.PRUNE: return 1.4
-	return 1.4
+		CardDef.Category.END: return 2.2
+		CardDef.Category.AURA: return 2.2
+		CardDef.Category.GRAFT: return 2.05
+		CardDef.Category.BRANCH: return 1.95
+		CardDef.Category.TIME: return 1.95
+		CardDef.Category.PRUNE: return 1.7
+	return 1.7
 
 
 # ======================================================================
@@ -509,6 +509,7 @@ func pan_by(px: Vector2) -> void:
 func reset_view() -> void:
 	zoom = 1.0
 	pan = Vector2.ZERO
+	_user_view = false
 	if _cam:
 		_apply_view()
 
@@ -522,6 +523,8 @@ func _clamp_pan() -> void:
 ## 缩放/平移输入：滚轮或 Ctrl+滚轮（触控板捏合）缩放；触控板双指滑动、右键/中键拖动平移；
 ## 双击右键复位。处理了返回 true。
 func _view_input(e: InputEvent) -> bool:
+	if e is InputEventMagnifyGesture or e is InputEventPanGesture or (e is InputEventMouseButton and (e as InputEventMouseButton).button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN, MOUSE_BUTTON_WHEEL_LEFT, MOUSE_BUTTON_WHEEL_RIGHT]):
+		_user_view = true
 	if e is InputEventMagnifyGesture:
 		zoom_at(e.position, e.factor)
 		return true
@@ -606,7 +609,7 @@ func _grid_bbox() -> Rect2:
 	for c in Hex.all_cells(board_radius()):
 		if Hex.distance(c, Vector2i.ZERO) < board_radius():
 			continue
-		for y: float in [0.0, 1.2]:
+		for y: float in [0.0, 2.2]:
 			for p in _proj_hex(c, 1.0, y):
 				if first:
 					bb = Rect2(p, Vector2.ZERO)
@@ -673,7 +676,39 @@ func set_state(t: TreeModel, p: Pulse.Result, tg: Dictionary, prune: bool, fl: D
 	super.set_state(t, p, tg, prune, fl)
 	if board_radius() != _fit_radius:
 		_layout()
+	_auto_frame(t)
 	_sync3d()
+
+
+## 玩家没手动缩放过时，镜头自动框住整棵树：树小时放大一点，并把树放在画面中央。
+var _user_view := false
+
+
+func _auto_frame(t: TreeModel) -> void:
+	if _user_view or t == null or _cam == null or not auto_frame:
+		return
+	var lo := Vector2(INF, INF)
+	var hi := Vector2(-INF, -INF)
+	var far := 0
+	for k in t.nodes:
+		var w := _wpos(k)
+		lo = Vector2(minf(lo.x, w.x), minf(lo.y, w.z))
+		hi = Vector2(maxf(hi.x, w.x), maxf(hi.y, w.z))
+		far = maxi(far, Hex.distance(k, Vector2i.ZERO))
+	var extent := float(far) + 2.0
+	var z := clampf((board_radius() + 1.0) / extent, 1.0, AUTO_ZOOM_MAX)
+	var c := (lo + hi) * 0.5 if z > 1.001 else Vector2.ZERO
+	if absf(z - zoom) < 0.04 and c.distance_to(pan) < 0.3:
+		return
+	zoom = z
+	pan = c
+	_clamp_pan()
+	_apply_view()
+
+
+## 自动取景的最大放大倍数；设为 false 可关掉（集市等场景）。
+const AUTO_ZOOM_MAX := 1.6
+var auto_frame := true
 
 
 func play_pulse(snapshot: TreeModel, res: Pulse.Result, sound: bool = true) -> void:
@@ -847,7 +882,7 @@ func _sync_wood(t: TreeModel) -> void:
 		ch.queue_free()
 	_glows.clear()
 	var bark := _flat(&"bark", Color("#5B4632"))
-	var vine := _flat(&"vine_wood", Palette.OLIVE.lerp(Palette.GOLD, 0.35))
+	var vine := _flat(&"vine_wood", Palette.GOLD.lerp(Palette.OLIVE, 0.25).lightened(0.1))
 	var glow := _mat(&"wood_glow", func():
 		var m := StandardMaterial3D.new()
 		m.albedo_color = Color("#F6CB72")
@@ -881,8 +916,8 @@ func _sync_wood(t: TreeModel) -> void:
 			var cyl := MeshInstance3D.new()
 			cyl.mesh = _cached_mesh(StringName("wood_%d_%s" % [n.depth, graft]), func():
 				var c := CylinderMesh.new()
-				c.top_radius = (r1 if not graft else 0.05)
-				c.bottom_radius = (r0 if not graft else 0.06)
+				c.top_radius = (r1 if not graft else 0.11)
+				c.bottom_radius = (r0 if not graft else 0.13)
 				c.height = Hex.SQRT3
 				c.radial_segments = 8
 				c.rings = 1
@@ -1197,7 +1232,7 @@ func _draw() -> void:
 				draw_polyline(tr, Color(Palette.OCHRE, 0.85 * land_a), 2.6 * k, true)
 				if anim_t < 0.0 and pulse.contrib.has(n.key) and n.key != hover:
 					var top := _proj(_standee_top(n.key, standee_height(n)))
-					_pill(top + Vector2(0, -9 * k), str(pulse.contrib[n.key]), int(12 * k),
+					_pill(top + Vector2(0, -9 * k), Pulse.big(pulse.contrib[n.key]), int(12 * k),
 						Color(Palette.TERRA.darkened(0.1), land_a), Color(Palette.SHEET, 0.9 * land_a))
 
 	# ---------- 图解视图：旧版式的六边形牌片 ----------
@@ -1221,11 +1256,19 @@ func _draw() -> void:
 				_text_outlined(title, p + Vector2(0, -s * 1.1 - rise), "+%s" % Pulse.big(pulse.contrib[n.key]),
 					int((22 + 8 * clampf(1.0 - dt * 3.0, 0.0, 1.0)) * k), Palette.TERRA)
 		elif flash.has(n.key) and not tracing and n.key != hover:
-			_text_outlined(body, p + Vector2(0, -s * 1.05), "+%d" % flash[n.key], int(15 * k), Color(Palette.TERRA, 0.85))
+			_text_outlined(body, p + Vector2(0, -s * 1.05), "+%s" % Pulse.big(flash[n.key]), int(15 * k), Color(Palette.TERRA, 0.85))
 		if n.key == _blink and _blink_t > 0.0:
 			var hp := _proj_hex(n.key, 1.0, 0.01)
 			hp.append(hp[0])
 			draw_polyline(hp, Color(Palette.OCHRE, _blink_t), 5.0 * k, true)
+
+	# ---------- 警示：将枯萎 / 刚被天灾打中 ----------
+	if anim_t < 0.0:
+		for c in warn:
+			var wp := _proj_hex(c, 0.95, 0.015)
+			wp.append(wp[0])
+			draw_polyline(wp, Color(Palette.TERRA, 0.55 + 0.35 * breathe), 3.0 * k, true)
+			_pill(center_of(c) + Vector2(0, s * 0.55), String(warn[c]), int(13 * k), Color.WHITE, Color(Palette.TERRA, 0.92))
 
 	# ---------- 悬停路径 ----------
 	if tracing:
@@ -1238,7 +1281,7 @@ func _draw() -> void:
 			if d == 0:
 				continue
 			var col := Palette.OLIVE.darkened(0.15) if d > 0 else Palette.TERRA.darkened(0.05)
-			_pill(center_of(c) + Vector2(0, -s * 1.05), ("+%d" if d > 0 else "−%d") % absi(d), int(14 * k), col, Color(Palette.SHEET, 0.96))
+			_pill(center_of(c) + Vector2(0, -s * 1.05), ("+%s" if d > 0 else "−%s") % Pulse.big(absi(d)), int(14 * k), col, Color(Palette.SHEET, 0.96))
 
 	# ---------- 预览牌：从父牌连过来的虚线 + 名字 ----------
 	if gt != &"" and anim_t < 0.0 and targets.has(hover) and Cards.has(gt):
@@ -1277,7 +1320,7 @@ func _draw_diagram(t: TreeModel, pulse: Pulse.Result, k: float, a: float) -> voi
 			draw_polyline(ol, Color(Palette.GOLD, a), 2.0 * k, true)
 			_text(title, p + Vector2(0, 7 * k), "种", int(22 * k), Color(Palette.CREAM, a))
 			_text(body, p + Vector2(0, -13 * k), "输出", int(9 * k), Color(Palette.CREAM, 0.8 * a))
-			_text(body, p + Vector2(0, 21 * k), str(v), int(12 * k), Color(Palette.GOLD.lightened(0.3), a))
+			_text(body, p + Vector2(0, 21 * k), Pulse.big(v), int(12 * k), Color(Palette.GOLD.lightened(0.3), a))
 			continue
 		var def := n.def()
 		var col := Palette.card_color(def.color_key)
@@ -1313,7 +1356,7 @@ func _draw_diagram(t: TreeModel, pulse: Pulse.Result, k: float, a: float) -> voi
 		if is_tip and pulse.contrib.has(c):
 			_text_outlined(body, p + Vector2(0, 20 * k), "收 %s" % Pulse.big(pulse.contrib[c]), int(11 * k), Color(Palette.TERRA, a), halo)
 		else:
-			_text_outlined(body, p + Vector2(0, 20 * k), str(v), int(11 * k), Color(Palette.INK, a), halo)
+			_text_outlined(body, p + Vector2(0, 20 * k), Pulse.big(v), int(11 * k), Color(Palette.INK, a), halo)
 		if not n.marks.is_empty():
 			var ms := "".join(n.marks.map(func(m): return Rules.MARKS[m].short))
 			_text_outlined(title, p + Vector2(-hex_size * 0.55, hex_size * 0.5), ms, int(12 * k), Color(Palette.GOLD, a), halo)

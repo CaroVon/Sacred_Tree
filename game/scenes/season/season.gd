@@ -53,7 +53,7 @@ var relic_bar: RelicBar
 const LEFT_W := 360.0
 const RIGHT_W := 290.0
 const SIDE_W := 380.0
-const TOP_H := 112.0
+const TOP_H := 170.0
 const BOTTOM_H := 185.0
 ## 脉动结算单。
 var sheet_panel: PrintBox
@@ -85,6 +85,41 @@ func _ready() -> void:
 		_build_tutorial()
 	_refresh()
 	_show_phase_modal()
+	if tut == null and run.phase == RunState.Phase.PLAY and run.turn == 1 and run.score == 0:
+		_season_intro.call_deferred()
+
+
+## 一季开始时的提示：天灾标题卡（标出被打中的格子）、开局的流派引导、第 1 年秋的进阶提示。
+func _season_intro() -> void:
+	var msgs: Array[String] = []
+	if run.is_calamity():
+		var cd := Cards.calamity(run.calamity)
+		_stamp_text("天灾 · " + cd.display_name)
+		msgs.append("天灾：%s——%s" % [cd.display_name, cd.desc])
+		if not run.last_calamity_hit.is_empty():
+			msgs.append("被打中的格子已用红框标出；送回手牌的牌这一季不占手牌上限。")
+	elif run.year == 1 and run.season == 1:
+		var st := Cards.starter(run.starter)
+		if st and STARTER_GUIDE.has(run.starter):
+			msgs.append("%s的玩法：%s" % [st.display_name, STARTER_GUIDE[run.starter]])
+	elif run.year == 1 and run.season == 3:
+		var grafts := 0
+		for n: TreeNode in run.tree.nodes.values():
+			if not n.is_seed() and n.def().is_graft():
+				grafts += 1
+		if grafts <= 1:
+			msgs.append("进阶提示：目标每季都在涨，一个嫁接点很快就不够用。试着再搭一个——两个挨着的末梢中间放一张藤。")
+	if not msgs.is_empty():
+		_toast(msgs)
+
+
+## 每个启程者开局时的一句玩法引导。
+const STARTER_GUIDE := {
+	&"gardener": "分叉让路径变多，藤把两个挨着的末梢嫁接起来让养分相乘。先搭一个嫁接点，再慢慢搭第二个。",
+	&"artisan": "齿轮挨在一起互相加成；熔炉牌按火候翻倍——修剪、冬季枯萎、天灾烧掉的每张牌都让火候 +1，所以剪牌就是在烧火。",
+	&"stargazer": "星辰牌看回合：流星在每季最后一回合 ×5、潮汐在奇数回合翻倍。别急着提前收获，把最后一回合打满。",
+	&"trader": "商会牌靠养分变强，留着养分别乱花；封印把收获存起来，季末一次释放，封得越久倍率越高。",
+}
 
 
 # ---------- 搭界面 ----------
@@ -158,6 +193,8 @@ func _build() -> void:
 	lbl_acts = _row(sv, "可放 / 剪 / 移栽", "")[1]
 	var heat_row := _row(sv, "火候 / 已燃烧", "")
 	lbl_heat = heat_row[1]
+	heat_row[0].tooltip_text = "火候：每有一张牌离开牌桌（修剪、冬季枯萎、天灾、祭坛）就 +1，整局累积不清零。熔炉流派的牌按火候翻倍。"
+	heat_row[0].mouse_filter = Control.MOUSE_FILTER_STOP
 	lbl_res = Label.new()
 	lbl_res.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	lbl_res.add_theme_font_size_override("font_size", 15)
@@ -277,8 +314,11 @@ func _build() -> void:
 · 移栽把一张牌连同后面的枝整体挪到别的芽点（每回合 %d 次），成熟度保留。
 · 本季累计达标后可以提前收获，剩余每回合得 %d 养分。每季结束都会进集市。
 · 牌型：长茎（末梢深度 ≥6）该末梢 ×2；星芒（一张牌长出 3 条子枝）流出 ×2；闭环（藤的父牌同源）×2；对称 总分 ×1.5。
-· 牌桌：滚轮或触控板捏合缩放，右键拖动平移，双击右键或 F 复位。牌桌每年外扩一圈。
-· 快捷键：1–9 选牌，空格脉动，G 收获，P 修剪，T 移栽，R 重抽，按住 Tab 图解，L 记录，H 规则，Esc 取消。" % [Rules.PLAYS, Rules.PRUNES, Rules.TRANSPLANTS, Rules.HARVEST_SAP_PER_TURN]
+· 牌桌：滚轮或触控板捏合缩放，右键拖动平移，双击右键或 F 复位。牌桌每年外扩一圈，树心每年多长 1 个芽点。
+· 树长满、没有空芽点时：修剪腾地方、移栽换方向，或在集市给牌加芽点。
+· 每季超过目标 10 倍、100 倍、1000 倍，各多得 %d 养分。
+· 地块：%s。
+· 快捷键：1–9 选牌，空格脉动，G 收获，P 修剪，T 移栽，R 重抽，按住 Tab 图解，L 记录，H 规则，Esc 取消。" % [Rules.PLAYS, Rules.PRUNES, Rules.TRANSPLANTS, Rules.HARVEST_SAP_PER_TURN, Rules.OVERKILL_SAP, Land.legend()]
 	rules_panel.add_child(rl)
 
 	# ---------- 右列：预计脉动 + 印章按钮 + 工具 ----------
@@ -495,6 +535,14 @@ func _refresh() -> void:
 	board.set_state(run.tree, res, _targets(), prune_mode or (transplant_mode and transplant_from == BoardView.NO_CELL), flash)
 	if transplant_mode and transplant_from != BoardView.NO_CELL:
 		board.highlight = Growth.subtree(run.tree, transplant_from)
+	# 警示：冬季将枯萎的末梢；天灾季第 1 回合标出刚被打中的格子
+	var warn := {}
+	for c in run.wither_preview():
+		warn[c] = "季末枯萎"
+	if run.is_calamity() and run.turn == 1:
+		for c in run.last_calamity_hit:
+			warn[c] = Cards.calamity(run.calamity).display_name
+	board.warn = warn
 
 	lbl_season.text = run.season_label()
 	lbl_turn.text = "回合 %d/%d" % [mini(run.turn, run.turns_this_season()), run.turns_this_season()]
@@ -544,6 +592,12 @@ func _refresh() -> void:
 	b_transplant.text = "取消移栽　[T]" if transplant_mode else "移栽　[T]"
 	b_transplant.theme_type_variation = &"ActiveButton" if transplant_mode else &""
 	b_redraw.disabled = not run.can_redraw() or (tut != null and not tut.is_free())
+	# 手牌全都打不出去：把修剪、移栽亮出来
+	if run.hand_stuck() and tut == null:
+		if not prune_mode and not b_prune.disabled:
+			b_prune.theme_type_variation = &"PrimaryButton"
+		if not transplant_mode and not b_transplant.disabled:
+			b_transplant.theme_type_variation = &"PrimaryButton"
 
 	_refresh_hand()
 	_refresh_hint()
@@ -616,6 +670,12 @@ func _refresh_hint() -> void:
 		hint.text = "修剪模式：点一张牌，剪掉它和它后面的所有枝。"
 	elif sel >= 0:
 		hint.text = "选中%s：点亮的虚线格可以放。把鼠标移到格子上查看预计变化。" % Cards.get_def(run.hand[sel]).display_name
+	elif tut == null and run.hand_stuck():
+		hint.text = "手里的牌都打不出去：树上没有空芽点了。可以「修剪」一段收益低的枝腾出芽点、「移栽」换个方向，或者到集市给牌加芽点。"
+	elif tut == null and run.phase == RunState.Phase.PLAY and run.turn >= 2 and run.score < run.target() and run.projected_total() < run.target():
+		hint.text = "照现在的预计，本季打完约 %s，还差 %s。再搭一个嫁接点、换上更强的末梢，或者花养分重抽。" % [Pulse.big(run.projected_total()), Pulse.big(run.target() - run.projected_total())]
+	elif tut == null and Rules.is_winter(run.season) and not run.wither_preview().is_empty():
+		hint.text = "冬季：标着「季末枯萎」的 %d 个最老末梢会在季末离开牌桌（刻「坚韧」或移栽可以保住）。" % run.wither_preview().size()
 	else:
 		hint.text = "选一张手牌开始生长，或者直接结束回合让神树脉动。"
 
@@ -754,18 +814,18 @@ func _show_flow(c: Vector2i) -> void:
 	for x in nodes:
 		var n := run.tree.at(x)
 		if n.is_seed():
-			lines.append("树心 输出 %d（第%d年%s，每季翻倍）" % [res.out[x], run.year, Rules.season_name(run.season)])
+			lines.append("树心 输出 %s（第%d年%s，每季翻倍）" % [Pulse.big(res.out[x]), run.year, Rules.season_name(run.season)])
 			continue
 		var tr: Array = res.trace.get(x, [])
 		var steps: Array = tr if n.def().is_graft() else tr.slice(1)
 		var ops: Array[String] = []
 		for st in steps:
 			ops.append(String(st.op) if st.label == n.def().display_name else "%s %s" % [st.label, st.op])
-		lines.append("→ %s：%s = %d" % [n.def().display_name, "，".join(ops), res.out[x]])
+		lines.append("→ %s：%s = %s" % [n.def().display_name, "，".join(ops), Pulse.big(res.out[x])])
 	var n := run.tree.at(c)
 	if res.tips.has(c):
 		var tt: Array = res.tip_trace.get(c, [])
-		var parts: Array[String] = ["%d" % res.out[c]]
+		var parts: Array[String] = [Pulse.big(res.out[c])]
 		for st in tt.slice(1):
 			parts.append("%s %s" % [st.label, st.op])
 		if parts.size() == 1:
@@ -774,6 +834,7 @@ func _show_flow(c: Vector2i) -> void:
 			lines.append("末梢收获：%s = %s" % ["，".join(parts), Pulse.big(res.contrib[c])])
 	else:
 		lines.append("（%s不是末梢：养分继续流向后面的 %d 张牌，它自己不计分）" % [_nm(n), n.children.size()])
+	board.chain_pos = Vector2(18, _left_col_bottom() + 12)
 	board.set_chain("\n".join(lines))
 	if n.is_seed():
 		hint.text = "树心：每季成熟一次，输出的养分翻倍；第 y 年再乘以 y。"
@@ -781,6 +842,15 @@ func _show_flow(c: Vector2i) -> void:
 		hint.text = "%s（%s）：%s" % [n.def().display_name, n.def().tag_line(), n.def().desc]
 		if not n.marks.is_empty():
 			hint.text += "  年轮：" + "、".join(n.marks.map(func(m): return Rules.mark_name(m)))
+
+
+## 左栏最下面一个可见面板的底边（算式框放在它下面，不被指导面板或结算单挡住）。
+func _left_col_bottom() -> float:
+	var bottom := 330.0
+	for ch in left_col.get_children():
+		if ch is Control and ch.visible:
+			bottom = maxf(bottom, ch.get_global_rect().end.y - board.get_global_rect().position.y)
+	return bottom
 
 
 ## 悬停目标格：画预览牌，标出每个末梢收获的增减，并用一句话说清楚为什么。
@@ -799,10 +869,10 @@ func _preview_placement(c: Vector2i, now: int) -> void:
 		var a: int = after.contrib.get(k, 0)
 		if not after.tips.has(k):
 			d[k] = -b
-			lost.append("%s −%d" % [_nm(run.tree.at(k)), b])
+			lost.append("%s −%s" % [_nm(run.tree.at(k)), Pulse.big(b)])
 		elif a != b:
 			d[k] = a - b
-			gained.append("%s %+d" % [_nm(run.tree.at(k)), a - b])
+			gained.append("%s %s%s" % [_nm(run.tree.at(k)), "+" if a >= b else "−", Pulse.big(absi(a - b))])
 	for k in after.tip_list:
 		if not before.tips.has(k):
 			d[k] = after.contrib[k]
@@ -812,7 +882,7 @@ func _preview_placement(c: Vector2i, now: int) -> void:
 	if not gained.is_empty():
 		parts.append("、".join(gained))
 	if not lost.is_empty():
-		parts.append("不再是末梢：" + "、".join(lost))
+		parts.append("接上新牌后不再单独计分：" + "、".join(lost))
 	var mult := ""
 	if after.total_mult != 1.0:
 		mult = "（整树 ×%s）" % Pulse.num(after.total_mult)
@@ -943,7 +1013,7 @@ func _on_tip_harvested(_cell: Vector2i, amount: int, at: Vector2) -> void:
 	var from := board.global_position + at
 	var to := lbl_score.global_position + lbl_score.size * 0.5
 	var l := Label.new()
-	l.text = "+%d" % amount
+	l.text = "+%s" % Pulse.big(amount)
 	l.add_theme_font_override("font", Palette.title())
 	l.add_theme_font_size_override("font_size", 34)
 	l.add_theme_color_override("font_color", Palette.TERRA)
@@ -1154,6 +1224,9 @@ func _unhandled_input(e: InputEvent) -> void:
 # ---------- 弹窗 ----------
 
 ## 右上角依次浮出几条消息（联动谱新条目、解锁），同时写进记录。
+var _toast_y := 0.0
+
+
 func _toast(msgs: Array[String]) -> void:
 	var all := Game.notices.duplicate()
 	all.append_array(msgs)
@@ -1175,14 +1248,20 @@ func _toast(msgs: Array[String]) -> void:
 		l.text = all[i]
 		l.add_theme_color_override("font_color", Palette.GOLD.lightened(0.35))
 		l.add_theme_font_size_override("font_size", 18)
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		l.custom_minimum_size = Vector2(460, 0)
 		box.add_child(l)
 		fly_layer.add_child(box)
-		box.position = Vector2(size.x - 520, 130 + i * 52)
+		box.reset_size()
+		box.position = Vector2(size.x - 520, 130 + _toast_y)
+		_toast_y += box.size.y + 8
 		box.modulate.a = 0.0
 		var tw := box.create_tween()
 		tw.tween_interval(0.3 + i * 0.4)
 		tw.tween_property(box, "modulate:a", 1.0, 0.25)
-		tw.tween_interval(3.5)
+		# 字多的提示多停一会
+		tw.tween_interval(3.5 + all[i].length() * 0.05)
+		tw.tween_callback(func(): _toast_y = 0.0)
 		tw.tween_property(box, "modulate:a", 0.0, 0.6)
 		tw.tween_callback(box.queue_free)
 
@@ -1204,24 +1283,27 @@ func _show_phase_modal() -> void:
 				btns.append({"card": run.reward_options[i], "fn": _choose_reward.bind(i)})
 			btns.append({"label": "跳过，得 %d 养分" % Rules.SKIP_REWARD_SAP, "fn": _skip_reward})
 			_open_modal("%s达标" % run.season_label(),
-				"本季累计 %s / %s，另得 %d 养分。选一张牌加入牌组，然后去集市；神树会带着现在的形状进入下一季。" % [Pulse.big(run.score), Pulse.big(run.target()), Rules.SEASON_CLEAR_SAP], btns)
+				_overkill_line() + "本季累计 %s / %s，另得 %d 养分。选一张牌加入牌组，然后去集市；神树会带着现在的形状进入下一季。" % [Pulse.big(run.score), Pulse.big(run.target()), Rules.SEASON_CLEAR_SAP], btns)
 		RunState.Phase.RELIC:
 			var btns: Array = []
 			for i in run.relic_options.size():
 				btns.append({"relic_id": run.relic_options[i], "fn": _choose_relic.bind(i), "relic": true})
 			btns.append({"label": "跳过，得 %d 养分" % Rules.SKIP_REWARD_SAP, "fn": _skip_relic})
 			_open_modal("度过%s" % Cards.calamity(run.calamity).display_name,
-				"天灾季累计 %s / %s，得 %d 养分。选一件器物，然后进入集市。" % [Pulse.big(run.score), Pulse.big(run.target()), Rules.CALAMITY_CLEAR_SAP], btns)
+				_overkill_line() + "天灾季累计 %s / %s，得 %d 养分。选一件器物，然后进入集市。" % [Pulse.big(run.score), Pulse.big(run.target()), Rules.CALAMITY_CLEAR_SAP], btns)
 		RunState.Phase.MARKET:
 			Game.goto(&"market")
 		RunState.Phase.EVENT:
 			Game.goto(&"event")
 		RunState.Phase.LOST:
-			_open_modal("这一季没有达标", "%s累计 %s，目标 %s。神树停止了生长。" % [run.season_label(), Pulse.big(run.score), Pulse.big(run.target())],
-				[{"label": "重新开始", "fn": func(): Game.new_run(), "primary": true}, {"label": "导出神树版画", "fn": _export_print}, {"label": "主菜单", "fn": func(): Game.goto(&"menu")}])
+			_open_modal("这一季没有达标",
+				"%s累计 %s，目标 %s，差 %s。神树停止了生长。\n\n为什么输：%s\n\n%s" % [run.season_label(), Pulse.big(run.score), Pulse.big(run.target()),
+					Pulse.big(run.target() - run.score), run.loss_reason, _run_summary()],
+				[{"control": _result_chart()}, {"label": "重新开始", "fn": func(): Game.new_run(), "primary": true}, {"label": "导出神树版画", "fn": _export_print}, {"label": "主菜单", "fn": func(): Game.goto(&"menu")}])
 		RunState.Phase.WON:
-			_open_modal("神树成年", "三年过去，神树长成了。牌桌上共有 %d 张牌，带着 %d 件器物。" % [run.tree.size() - 1, run.relics.size()],
-				[{"label": "再培育一棵", "fn": func(): Game.new_run(), "primary": true}, {"label": "导出神树版画", "fn": _export_print}, {"label": "主菜单", "fn": func(): Game.goto(&"menu")}])
+			_open_modal("神树成年",
+				"三年过去，神树长成了！牌桌上共有 %d 张牌，带着 %d 件器物。\n\n%s" % [run.tree.size() - 1, run.relics.size(), _run_summary()],
+				[{"control": _result_chart()}, {"label": "再培育一棵", "fn": func(): Game.new_run(), "primary": true}, {"label": "导出神树版画", "fn": _export_print}, {"label": "主菜单", "fn": func(): Game.goto(&"menu")}])
 		_:
 			modal.visible = false
 
@@ -1234,10 +1316,15 @@ func _open_modal(title: String, text: String, btns: Array) -> void:
 	var first: Control = null
 	var deal := 0
 	for b in btns:
+		if b.has("control"):
+			modal_btns.add_child(b.control)
+			continue
 		var el: Button
 		if b.has("card"):
 			var cv := CardView.make(b.card)
 			cv.draggable = false
+			cv.desc_h = 112.0
+			cv.custom_minimum_size = Vector2(CardView.W, CardView.H + cv.desc_h)
 			el = cv
 		elif b.has("relic_id"):
 			el = _relic_button(b)
@@ -1276,6 +1363,58 @@ func _open_modal(title: String, text: String, btns: Array) -> void:
 		tw.tween_property(box, "scale", Vector2.ONE, 0.34).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	if first:
 		first.grab_focus.call_deferred()
+
+
+## 超额提示（季末弹窗开头）。
+func _overkill_line() -> String:
+	if run.last_overkill <= 0:
+		return ""
+	return "★ 超额 ×%d！多得 %d 养分。\n" % [int(pow(10, run.last_overkill)), Rules.OVERKILL_SAP * run.last_overkill]
+
+
+## 本局小结：最高一次脉动、贡献最多的末梢、无牌可打的回合、解锁进度。
+func _run_summary() -> String:
+	var lines: Array[String] = []
+	if not run.best_pulse.is_empty():
+		lines.append("最高一次脉动：%s（第%d年%s）" % [Pulse.big(int(run.best_pulse.total)), int(run.best_pulse.y), Rules.season_name(int(run.best_pulse.s))])
+	if not run.best_tip.is_empty() and Cards.has(StringName(run.best_tip.type)):
+		lines.append("最强末梢：%s，一次收获 %s" % [Cards.get_def(StringName(run.best_tip.type)).display_name, Pulse.big(int(run.best_tip.value))])
+	lines.append("走过 %d 季 · 无牌可打的回合 %d 个" % [run.history.size(), run.stuck_total])
+	var locked: Array[String] = []
+	for f in CardDef.FAMILY_NAMES:
+		if not Game.profile.has_family(f):
+			locked.append("%s（%s）" % [CardDef.FAMILY_NAMES[f], Game.profile.unlock_hint_family(f)])
+	if not locked.is_empty():
+		lines.append("下一个解锁：" + locked[0])
+	return "\n".join(lines)
+
+
+## 结算图：每季的得分 / 目标（对数刻度的柱子，达标为绿、未达标为红）。
+func _result_chart() -> Control:
+	var c := Control.new()
+	c.custom_minimum_size = Vector2(15 * 34 + 20, 150)
+	var hist := run.history.duplicate()
+	c.draw.connect(func():
+		var base := 120.0
+		c.draw_line(Vector2(0, base), Vector2(c.size.x, base), Color(Palette.INK, 0.4), 1.0)
+		var top := 1.0
+		for h in hist:
+			top = maxf(top, log(maxf(1.0, float(h.score))) / log(10.0))
+			top = maxf(top, log(maxf(1.0, float(h.target))) / log(10.0))
+		var f := Palette.body()
+		for i in hist.size():
+			var h: Dictionary = hist[i]
+			var x := 10.0 + i * 34.0
+			var hs := 90.0 * (log(maxf(1.0, float(h.score))) / log(10.0)) / top
+			var ht := 90.0 * (log(maxf(1.0, float(h.target))) / log(10.0)) / top
+			var ok := int(h.score) >= int(h.target)
+			c.draw_rect(Rect2(x, base - hs, 22, hs), Color(Palette.OLIVE if ok else Palette.TERRA, 0.8))
+			c.draw_line(Vector2(x - 3, base - ht), Vector2(x + 25, base - ht), Palette.INK, 2.0)
+			c.draw_string(f, Vector2(x, base + 16), Rules.season_name(int(h.s)).substr(0, 1), HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Palette.SOFT)
+			if int(h.s) == 1:
+				c.draw_string(f, Vector2(x, base + 31), "第%d年" % int(h.y), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Palette.SOFT)
+		c.draw_string(f, Vector2(0, 12), "每季得分（柱）与目标（横线）", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Palette.SOFT))
+	return c
 
 
 ## 器物按钮：左边一幅器物版画，右边名字和说明。
@@ -1469,7 +1608,7 @@ func _finish_tutorial_modal() -> void:
 "
 		+ "· 季节各有特性：春多抽一张、夏多放一张、秋末端牌 ×1.5、冬季末最老的末梢会枯萎。
 "
-		+ "· 每季达标后三选一加一张新牌；度过天灾后选一件器物，再去集市花养分买牌、刻年轮、改造土地。
+		+ "· 每季达标后三选一加一张新牌，然后进集市花养分买牌、刻年轮、改造土地；度过天灾后还能选一件器物。
 "
 		+ "· 土地有沃土（+2）、岩石（不能长）、泉眼（相邻末梢 +2）。
 "

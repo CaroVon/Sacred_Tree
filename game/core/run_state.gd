@@ -71,6 +71,20 @@ var legend_pick: bool = true
 var banned: Array[StringName] = []
 ## 本季天灾已经从牌桌上移走的牌数（上限 Rules.CALAMITY_REMOVE_CAP）。
 var calamity_removed: int = 0
+## 本季被天灾送回手牌的张数：手牌上限临时放宽这么多，不会因为天灾被迫弃牌。
+var calamity_hand_bonus: int = 0
+## 每季记录：{y, s, score, target}；最高一次脉动；贡献最高的末梢；本季无牌可打的回合数。
+var history: Array = []
+var best_pulse: Dictionary = {}
+var best_tip: Dictionary = {}
+var stuck_turns: int = 0
+## 本局累计无牌可打的回合数（复盘用）与上一季的超额档位（界面显示）。
+var stuck_total: int = 0
+var last_overkill: int = 0
+## 输掉时的原因（复盘用）。
+var loss_reason: String = ""
+## 最近一次天灾移走/打乱的格子（界面闪红用，不存档）。
+var last_calamity_hit: Array = []
 var last_pulse: Pulse.Result
 var log_lines: Array[String] = []
 
@@ -194,6 +208,10 @@ func season_label() -> String:
 
 
 func hand_limit() -> int:
+	return _base_hand_limit() + calamity_hand_bonus
+
+
+func _base_hand_limit() -> int:
 	return Rules.hand_size(season) + (1 if has_relic(&"basket") else 0)
 
 
@@ -430,6 +448,9 @@ func redraw() -> bool:
 func end_turn() -> Pulse.Result:
 	if phase != Phase.PLAY:
 		return null
+	if hand_stuck():
+		stuck_turns += 1
+		stuck_total += 1
 	var res := preview()
 	last_pulse = res
 	score = mini(score + res.total, Pulse.SCORE_CAP)
@@ -451,6 +472,7 @@ func end_turn() -> Pulse.Result:
 	for n: TreeNode in tree.nodes.values():
 		n.age += 1
 	add_log("%s第 %d 回合脉动：%d 个末梢，得 %s" % [season_label(), turn, res.tip_list.size(), Pulse.big(res.total)])
+	_track_pulse(res)
 	if has_relic(&"windkey"):
 		for n: TreeNode in tree.nodes.values():
 			n.age += 1
@@ -476,6 +498,16 @@ func end_turn() -> Pulse.Result:
 		_check_overflow()
 	changed.emit()
 	return res
+
+
+func _track_pulse(res: Pulse.Result) -> void:
+	if best_pulse.is_empty() or res.total > int(best_pulse.total):
+		best_pulse = {"total": res.total, "y": year, "s": season}
+	for k in res.contrib:
+		var v := int(res.contrib[k])
+		var n := tree.at(k)
+		if n and not n.is_seed() and (best_tip.is_empty() or v > int(best_tip.value)):
+			best_tip = {"type": String(n.type), "value": v, "y": year, "s": season}
 
 
 func _reset_turn() -> void:
@@ -588,6 +620,8 @@ func _pests() -> void:
 	calamity_removed += 1
 	var t := tips[rng.randi_range(0, tips.size() - 1)]
 	var name := Cards.get_def(t.type).display_name
+	calamity_hand_bonus += 1
+	last_calamity_hit = [t.key]
 	_remove_to_hand({t.key: true})
 	add_log("虫害：咬掉了%s（回到手牌）" % name)
 
@@ -615,6 +649,8 @@ func _gale() -> void:
 		if calamity_budget() <= 0:
 			return
 		calamity_removed += 1
+		calamity_hand_bonus += 1
+		last_calamity_hit = [t.key]
 		_remove_to_hand({t.key: true})
 		add_log("大风：把%s吹回了手牌" % name)
 		return
@@ -663,9 +699,10 @@ func _lightning() -> void:
 				safe = false
 		if safe:
 			calamity_removed += set.size()
+			calamity_hand_bonus += set.size()
 			_remove_to_hand(set)
 			add_log("雷击：劈断了 %d 张牌（回到手牌，下回合可用）" % set.size())
-			_check_overflow()
+			last_calamity_hit = set.keys()
 			return
 
 
@@ -744,10 +781,20 @@ func _pick_calamity() -> void:
 # ---------- 季末、奖励、器物 ----------
 
 func _end_season() -> void:
+	history.append({"y": year, "s": season, "score": score, "target": target()})
 	if score < target() and not ignore_targets:
 		phase = Phase.LOST
+		loss_reason = _loss_reason()
 		add_log("本季累计 %s，未达到目标 %s。" % [Pulse.big(score), Pulse.big(target())])
 		return
+	last_overkill = 0
+	if target() > 0:
+		var ratio := float(score) / float(target())
+		while last_overkill < Rules.OVERKILL_MAX_TIERS and ratio >= pow(10.0, last_overkill + 1):
+			last_overkill += 1
+		if last_overkill > 0:
+			sap += Rules.OVERKILL_SAP * last_overkill
+			add_log("超额 ×%d：多得 %d 养分" % [int(pow(10, last_overkill)), Rules.OVERKILL_SAP * last_overkill])
 	if is_calamity():
 		sap += Rules.CALAMITY_CLEAR_SAP
 		add_log("度过了%s，得 %d 养分" % [Cards.calamity(calamity).display_name, Rules.CALAMITY_CLEAR_SAP])
@@ -764,9 +811,10 @@ func _end_season() -> void:
 		return
 	sap += Rules.SEASON_CLEAR_SAP
 	phase = Phase.REWARD
-	var cards := card_pool()
+	var cards := reward_pool()
 	var n := Rules.REWARD_CHOICES + (1 if has_relic(&"seedbag") else 0)
 	reward_options.assign(roll_cards(cards, n))
+	_ensure_branch_reward(cards)
 	if has_relic(&"compass"):
 		shuffle(cards)
 		_compass_reward(cards)
@@ -784,6 +832,48 @@ func card_pool() -> Array[StringName]:
 	return out
 
 
+## 季末选牌的卡池：去掉故意很弱的「修剪材料」牌（枯枝一类），不浪费选项。
+func reward_pool() -> Array[StringName]:
+	var out: Array[StringName] = []
+	for id in card_pool():
+		if Cards.get_def(id).category != CardDef.Category.PRUNE:
+			out.append(id)
+	return out
+
+
+## 能长出至少 2 个芽点的牌（分叉、三叉、侧枝……）。
+static func is_branching(id: StringName) -> bool:
+	var d := Cards.get_def(id)
+	return d != null and d.ports.size() >= 2
+
+
+## 空芽点不够时，保证选牌里至少有一张能分枝的牌。
+func _ensure_branch_reward(pool: Array[StringName]) -> void:
+	if reward_options.is_empty() or free_buds() >= Rules.LOW_BUDS:
+		return
+	for o in reward_options:
+		if is_branching(o):
+			return
+	var cand: Array[StringName] = []
+	for id in pool:
+		if is_branching(id) and not reward_options.has(id):
+			cand.append(id)
+	if not cand.is_empty():
+		reward_options[reward_options.size() - 1] = cand[rng.randi_range(0, cand.size() - 1)]
+
+
+## 输掉的原因（给复盘页）。
+func _loss_reason() -> String:
+	var gap := target() - score
+	if stuck_turns >= 2:
+		return "本季有 %d 个回合一张牌都打不出去（没有空芽点）。树长满时，可以修剪、移栽，或在集市给牌加芽点。" % stuck_turns
+	if gap <= target() / 10:
+		return "只差 %s（%d%%）。提前一回合再搭一个嫁接点，或者用养分重抽，可能就过了。" % [Pulse.big(gap), int(round(100.0 * gap / maxf(1.0, target())))]
+	if Rules.is_calamity(season):
+		return "天灾季只有 %d 个回合，目标却不低于冬季。下次在冬季给核心牌刻「坚韧」，或者留一个能当回合补救的嫁接点。" % turns_this_season()
+	return "这一季的目标比上一季高了很多，树的成长没跟上。下一局试着更早搭出第二、第三个嫁接点。"
+
+
 func family_allowed(d: CardDef) -> bool:
 	if families_allowed.is_empty():
 		return true
@@ -793,10 +883,10 @@ func family_allowed(d: CardDef) -> bool:
 	return true
 
 
-## 牌组里牌数最多的新流派（最多 k 个）。
+## 牌组里牌数最多的新流派（最多 k 个）。牌桌上的牌也算（牌桌跨季保留，大部分流派牌都在树上）。
 func top_families(k: int = 2) -> Array[StringName]:
 	var counts := {}
-	var dc := deck_counts()
+	var dc := owned_counts()
 	for t in dc:
 		for f in Cards.get_def(t).family:
 			if f != &"wood":
@@ -805,7 +895,11 @@ func top_families(k: int = 2) -> Array[StringName]:
 	keys.sort_custom(func(a, b): return counts[a] > counts[b] if counts[a] != counts[b] else String(a) < String(b))
 	var out: Array[StringName] = []
 	for f in keys.slice(0, k):
-		out.append(f)
+		if int(counts[f]) >= Rules.MAIN_FAMILY_MIN:
+			out.append(f)
+	# 还没有成型的新流派：古木就是主流派（园丁开局、纯古木构筑也能拿到偏向古木的牌）
+	if out.is_empty():
+		out.append(&"wood")
 	return out
 
 
@@ -872,7 +966,7 @@ func refine(t: StringName) -> bool:
 ## 罗盘：保证至少一个选项来自牌组里最多的新流派。
 func _compass_reward(pool: Array) -> void:
 	var counts := {}
-	var dc := deck_counts()
+	var dc := owned_counts()
 	for t in dc:
 		for f in Cards.get_def(t).family:
 			if f != &"wood":
@@ -1022,6 +1116,8 @@ func _start_season() -> void:
 	turn = 1
 	score = 0
 	calamity_removed = 0
+	calamity_hand_bonus = 0
+	stuck_turns = 0
 	if has_relic(&"tongs"):
 		heat += 5
 	phase = Phase.PLAY
@@ -1061,11 +1157,17 @@ func _spend(n: int) -> void:
 	spent_total += n
 
 
+## 器物池：通用器物总在；流派器物只在牌组里有这个流派（前两名）时出现。
 func _relic_pool() -> Array[StringName]:
 	var pool: Array[StringName] = []
+	var top := top_families()
 	for r in Cards.relic_ids():
-		if not relics.has(r) and not market_relics.has(r):
-			pool.append(r)
+		if relics.has(r) or market_relics.has(r):
+			continue
+		var f: StringName = Cards.relic(r).family
+		if f != &"" and not top.has(f):
+			continue
+		pool.append(r)
 	return pool
 
 
@@ -1119,6 +1221,46 @@ func _sell_relic_at(i: int) -> void:
 	sap += gain
 	relics.remove_at(i)
 	add_log("卖出器物%s（+%d）" % [Cards.relic(r).display_name, gain])
+
+
+## 拥有的全部牌：牌组（牌堆、弃牌、手牌、燃尽）加上牌桌上的牌。
+func owned_counts() -> Dictionary:
+	var out := deck_counts()
+	for n: TreeNode in tree.nodes.values():
+		if not n.is_seed():
+			out[n.type] = int(out.get(n.type, 0)) + 1
+	return out
+
+
+## 牌桌上空着、能长新牌的芽点数（按一张普通的茎来数）。
+func free_buds() -> int:
+	return Growth.targets_for(tree, &"stem", ctx()).size()
+
+
+## 手里有牌、但一张都打不出去（且还有出牌次数）。
+func hand_stuck() -> bool:
+	if phase != Phase.PLAY or hand.is_empty() or plays <= 0:
+		return false
+	for i in hand.size():
+		if can_play(i):
+			return false
+	return true
+
+
+## 按现在的预计脉动打完本季，大约能到多少（含本回合）。
+func projected_total() -> int:
+	var left := turns_this_season() - turn + 1
+	return mini(score + preview().total * maxi(0, left), Pulse.SCORE_CAP)
+
+
+## 冬季季末会枯萎的末梢（按现在的牌桌）。
+func wither_preview() -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	if not Rules.is_winter(season):
+		return out
+	for t in _vulnerable_tips().slice(0, Rules.WINTER_WITHER):
+		out.append(t.key)
+	return out
 
 
 func deck_counts() -> Dictionary:
@@ -1245,6 +1387,7 @@ func leave_market() -> void:
 	var old_r := tree.radius
 	tree.radius = maxi(tree.radius, Rules.radius_for_year(year))
 	var added := Land.scatter(tree, rng, Rules.YEARLY_LAND)
+	_grow_seed_port()
 	if tree.radius > old_r:
 		added.append_array(Land.scatter(tree, rng, Rules.RING_LAND, old_r + 1))
 		var sp := Land.SPECIALS.duplicate()
@@ -1253,6 +1396,27 @@ func leave_market() -> void:
 	_start_season()
 	add_log("第%d年春季开始，目标 %s；牌桌扩到半径 %d，新长出 %d 块地" % [year, Pulse.big(target()), tree.radius, added.size()])
 	changed.emit()
+
+
+## 新的一年树心多长一个芽点（朝没有牌、能长的方向优先）。
+func _grow_seed_port() -> void:
+	var s := tree.at(Vector2i.ZERO)
+	if s == null:
+		return
+	var have := Growth.ports_of(s, ctx())
+	var best := -1
+	for d: int in [0, 2, 4]:
+		if have.has(d):
+			continue
+		if Growth.can_grow_on(tree, Hex.DIRS[d]):
+			best = d
+			break
+		if best < 0:
+			best = d
+	for i in Rules.SEED_PORT_PER_YEAR:
+		if best >= 0:
+			s.extra_ports.append(best)
+			add_log("新的一年：树心多长出一个芽点")
 
 
 # ---------- 工具 ----------
@@ -1292,6 +1456,9 @@ func to_dict() -> Dictionary:
 		"spent_total": spent_total,
 		"event_id": String(event_id), "seen_events": _names(seen_events), "event_result": event_result.duplicate(),
 		"market_discount": market_discount, "bonus_transplants": bonus_transplants,
+		"calamity_removed": calamity_removed, "calamity_hand_bonus": calamity_hand_bonus,
+		"history": history.duplicate(true), "best_pulse": best_pulse.duplicate(), "best_tip": best_tip.duplicate(),
+		"stuck_turns": stuck_turns, "stuck_total": stuck_total, "loss_reason": loss_reason,
 		"log": log_lines.duplicate(),
 	}
 
@@ -1326,6 +1493,14 @@ static func from_dict(d: Dictionary) -> RunState:
 	s.relic_options = _ids(d.relic_options)
 	s.relics = _ids(d.relics)
 	s.calamity = StringName(d.calamity)
+	s.calamity_removed = int(d.get("calamity_removed", 0))
+	s.calamity_hand_bonus = int(d.get("calamity_hand_bonus", 0))
+	s.history = d.get("history", []).map(func(h): return _int_dict(h))
+	s.best_pulse = _int_dict(d.get("best_pulse", {}))
+	s.best_tip = _int_dict(d.get("best_tip", {}))
+	s.stuck_turns = int(d.get("stuck_turns", 0))
+	s.stuck_total = int(d.get("stuck_total", 0))
+	s.loss_reason = String(d.get("loss_reason", ""))
 	s.seen_calamities = _ids(d.seen_calamities)
 	s.market_cards = _ids(d.market_cards)
 	s.market_relics = _ids(d.get("market_relics", []))
@@ -1343,6 +1518,14 @@ static func from_dict(d: Dictionary) -> RunState:
 	for l in d.get("log", []):
 		s.log_lines.append(String(l))
 	return s
+
+
+## JSON 把整数读成浮点：把数值字段转回整数。
+static func _int_dict(h: Dictionary) -> Dictionary:
+	var out := {}
+	for k in h:
+		out[k] = int(h[k]) if (h[k] is float) else h[k]
+	return out
 
 
 static func _names(a: Array[StringName]) -> Array:

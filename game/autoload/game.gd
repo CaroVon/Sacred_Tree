@@ -160,6 +160,7 @@ func finish_tutorial() -> void:
 func new_run(run_seed: int = -1, starter: StringName = &"gardener") -> void:
 	tutorial = null
 	if not profile.has_starter(starter):
+		push_warning("启程者 %s 不存在或未解锁，改用园丁" % starter)
 		starter = &"gardener"
 	run = RunState.create(run_seed, starter, profile.families())
 	profile.record_run_start()
