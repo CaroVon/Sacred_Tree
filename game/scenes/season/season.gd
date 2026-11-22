@@ -499,7 +499,7 @@ func _refresh() -> void:
 	lbl_season.text = run.season_label()
 	lbl_turn.text = "回合 %d/%d" % [mini(run.turn, run.turns_this_season()), run.turns_this_season()]
 	var shown := run.score if _score_shown < 0 else _score_shown
-	lbl_score.text = "%d / %d" % [shown, run.target() if _score_shown < 0 else _score_target]
+	lbl_score.text = "%s / %s" % [Pulse.big(shown), Pulse.big(run.target() if _score_shown < 0 else _score_target)]
 	bar.max_value = run.target() if _score_shown < 0 else _score_target
 	bar.value = mini(shown, int(bar.max_value))
 	_set_num(lbl_pulse, res.total)
@@ -523,7 +523,7 @@ func _refresh() -> void:
 	var pend := run.pending_release()
 	if res.stored_total > 0 or pend > 0:
 		lbl_patterns.text += ("
-" if lbl_patterns.text != "" else "") + "封存：本次 +%d，季末释放 %d" % [res.stored_total, pend]
+" if lbl_patterns.text != "" else "") + "封存：本次 +%s，季末释放 %s" % [Pulse.big(res.stored_total), Pulse.big(pend)]
 		lbl_patterns.visible = true
 	lbl_sap.text = str(run.sap)
 	lbl_piles.text = "%d / %d" % [run.deck.size(), run.discard.size()]
@@ -719,7 +719,7 @@ func _on_cell_hovered(c: Vector2i) -> void:
 			board.highlight = Growth.subtree(run.tree, transplant_from)
 			var after := run.tree_after_transplant(transplant_from, c)
 			if after:
-				hint.text = "挪到这里：下次脉动 %d → %d" % [now, Pulse.resolve(after, run.ctx()).total]
+				hint.text = "挪到这里：下次脉动 %s → %s" % [Pulse.big(now), Pulse.big(Pulse.resolve(after, run.ctx()).total)]
 		board.queue_redraw()
 		return
 	if sel >= 0 and board.targets.has(c):
@@ -733,7 +733,7 @@ func _on_cell_hovered(c: Vector2i) -> void:
 		var pv := run.preview_prune(c)
 		if not pv.is_empty():
 			board.highlight = Growth.subtree(run.tree, c)
-			hint.text = "剪掉 %d 张，得 %d 养分；下次脉动 %d → %d" % [pv.count, pv.gain, now, pv.total]
+			hint.text = "剪掉 %d 张，得 %d 养分；下次脉动 %s → %s" % [pv.count, pv.gain, Pulse.big(now), Pulse.big(pv.total)]
 	elif run.tree.has(c) and not board.is_animating() and not prune_mode:
 		_show_flow(c)
 	else:
@@ -769,9 +769,9 @@ func _show_flow(c: Vector2i) -> void:
 		for st in tt.slice(1):
 			parts.append("%s %s" % [st.label, st.op])
 		if parts.size() == 1:
-			lines.append("末梢收获 %d（没有额外加成）" % res.contrib[c])
+			lines.append("末梢收获 %s（没有额外加成）" % Pulse.big(res.contrib[c]))
 		else:
-			lines.append("末梢收获：%s = %d" % ["，".join(parts), res.contrib[c]])
+			lines.append("末梢收获：%s = %s" % ["，".join(parts), Pulse.big(res.contrib[c])])
 	else:
 		lines.append("（%s不是末梢：养分继续流向后面的 %d 张牌，它自己不计分）" % [_nm(n), n.children.size()])
 	board.set_chain("\n".join(lines))
@@ -806,7 +806,7 @@ func _preview_placement(c: Vector2i, now: int) -> void:
 	for k in after.tip_list:
 		if not before.tips.has(k):
 			d[k] = after.contrib[k]
-			gained.append("新末梢%s +%d" % [_nm(after_tree.at(k)), after.contrib[k]])
+			gained.append("新末梢%s +%s" % [_nm(after_tree.at(k)), Pulse.big(after.contrib[k])])
 	board.delta = d
 	var parts: Array[String] = []
 	if not gained.is_empty():
@@ -816,7 +816,7 @@ func _preview_placement(c: Vector2i, now: int) -> void:
 	var mult := ""
 	if after.total_mult != 1.0:
 		mult = "（整树 ×%s）" % Pulse.num(after.total_mult)
-	hint.text = "放在这里：下次脉动 %d → %d%s。%s" % [now, after.total, mult, "；".join(parts)]
+	hint.text = "放在这里：下次脉动 %s → %s%s。%s" % [Pulse.big(now), Pulse.big(after.total), mult, "；".join(parts)]
 
 
 func _nm(n: TreeNode) -> String:
@@ -825,7 +825,7 @@ func _nm(n: TreeNode) -> String:
 
 ## 数字变化时滚动过去，静止时不动。
 func _set_num(label: Label, value: int) -> void:
-	if label.text == str(value):
+	if label.get_meta(&"num", -1) == value:
 		return
 	Fx.count_to(label, value, 0.45)
 
@@ -983,7 +983,7 @@ func _bump_score(amount: int) -> void:
 func _refresh_score_only() -> void:
 	var shown := run.score if _score_shown < 0 else _score_shown
 	var tgt := run.target() if _score_shown < 0 else _score_target
-	lbl_score.text = "%d / %d" % [shown, tgt]
+	lbl_score.text = "%s / %s" % [Pulse.big(shown), Pulse.big(tgt)]
 	bar.max_value = tgt
 	bar.value = mini(shown, tgt)
 
@@ -1191,26 +1191,33 @@ func _show_phase_modal() -> void:
 	match run.phase:
 		RunState.Phase.REWARD when tut != null:
 			_finish_tutorial_modal()
+		RunState.Phase.REWARD when run.legend_reward:
+			var btns: Array = []
+			for i in run.reward_options.size():
+				btns.append({"card": run.reward_options[i], "fn": _choose_reward.bind(i)})
+			btns.append({"label": "跳过，得 %d 养分" % Rules.SKIP_REWARD_SAP, "fn": _skip_reward})
+			_open_modal("传说之选",
+				"度过天灾，神树结出一枚传说的种子。传说牌不一定数值更高，但每张都会改写一条规则。选一张加入牌组，然后进入集市。", btns)
 		RunState.Phase.REWARD:
 			var btns: Array = []
 			for i in run.reward_options.size():
 				btns.append({"card": run.reward_options[i], "fn": _choose_reward.bind(i)})
 			btns.append({"label": "跳过，得 %d 养分" % Rules.SKIP_REWARD_SAP, "fn": _skip_reward})
 			_open_modal("%s达标" % run.season_label(),
-				"本季累计 %d / %d，另得 %d 养分。选一张牌加入牌组，然后去集市；神树会带着现在的形状进入下一季。" % [run.score, run.target(), Rules.SEASON_CLEAR_SAP], btns)
+				"本季累计 %s / %s，另得 %d 养分。选一张牌加入牌组，然后去集市；神树会带着现在的形状进入下一季。" % [Pulse.big(run.score), Pulse.big(run.target()), Rules.SEASON_CLEAR_SAP], btns)
 		RunState.Phase.RELIC:
 			var btns: Array = []
 			for i in run.relic_options.size():
 				btns.append({"relic_id": run.relic_options[i], "fn": _choose_relic.bind(i), "relic": true})
 			btns.append({"label": "跳过，得 %d 养分" % Rules.SKIP_REWARD_SAP, "fn": _skip_relic})
 			_open_modal("度过%s" % Cards.calamity(run.calamity).display_name,
-				"天灾季累计 %d / %d，得 %d 养分。选一件器物，然后进入集市。" % [run.score, run.target(), Rules.CALAMITY_CLEAR_SAP], btns)
+				"天灾季累计 %s / %s，得 %d 养分。选一件器物，然后进入集市。" % [Pulse.big(run.score), Pulse.big(run.target()), Rules.CALAMITY_CLEAR_SAP], btns)
 		RunState.Phase.MARKET:
 			Game.goto(&"market")
 		RunState.Phase.EVENT:
 			Game.goto(&"event")
 		RunState.Phase.LOST:
-			_open_modal("这一季没有达标", "%s累计 %d，目标 %d。神树停止了生长。" % [run.season_label(), run.score, run.target()],
+			_open_modal("这一季没有达标", "%s累计 %s，目标 %s。神树停止了生长。" % [run.season_label(), Pulse.big(run.score), Pulse.big(run.target())],
 				[{"label": "重新开始", "fn": func(): Game.new_run(), "primary": true}, {"label": "导出神树版画", "fn": _export_print}, {"label": "主菜单", "fn": func(): Game.goto(&"menu")}])
 		RunState.Phase.WON:
 			_open_modal("神树成年", "三年过去，神树长成了。牌桌上共有 %d 张牌，带着 %d 件器物。" % [run.tree.size() - 1, run.relics.size()],
@@ -1330,8 +1337,16 @@ func _choose_relic(i: int) -> void:
 		_ask_replace(i)
 		return
 	run.choose_relic(i)
+	_after_relic_ui()
+
+
+## 器物之后：可能还有传说三选一，否则去集市。
+func _after_relic_ui() -> void:
 	Game.save()
-	Game.goto(&"market")
+	if run.phase == RunState.Phase.REWARD:
+		_show_phase_modal()
+	else:
+		Game.goto(&"market")
 
 
 ## 器物槽满了：选一件旧器物换下（按出售价返还养分）。
@@ -1347,14 +1362,12 @@ func _ask_replace(i: int) -> void:
 
 func _replace_relic(i: int, j: int) -> void:
 	if run.choose_relic(i, j):
-		Game.save()
-		Game.goto(&"market")
+		_after_relic_ui()
 
 
 func _skip_relic() -> void:
 	run.skip_relic()
-	Game.save()
-	Game.goto(&"market")
+	_after_relic_ui()
 
 
 func _after_season() -> void:
@@ -1492,7 +1505,7 @@ func _build_sheet() -> void:
 	var head := Button.new()
 	head.flat = true
 	head.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	head.text = "%s 本回合脉动结算：+%d" % ["▼" if sheet_open else "▲", res.total]
+	head.text = "%s 本回合脉动结算：+%s" % ["▼" if sheet_open else "▲", Pulse.big(res.total)]
 	head.tooltip_text = "点击收起/展开"
 	head.add_theme_color_override("font_color", Palette.OCHRE.darkened(0.2))
 	head.pressed.connect(_toggle_sheet)
@@ -1515,9 +1528,9 @@ func _build_sheet() -> void:
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		b.add_theme_font_size_override("font_size", 16)
 		if extra.is_empty():
-			b.text = "· %s：%d" % [_nm(n), res.contrib[k]]
+			b.text = "· %s：%s" % [_nm(n), Pulse.big(res.contrib[k])]
 		else:
-			b.text = "· %s：%d，%s = %d" % [_nm(n), res.out[k], "，".join(extra), res.contrib[k]]
+			b.text = "· %s：%s，%s = %s" % [_nm(n), Pulse.big(res.out[k]), "，".join(extra), Pulse.big(res.contrib[k])]
 		b.tooltip_text = "点击在牌桌上找到它"
 		b.pressed.connect(board.blink.bind(k))
 		sheet_box.add_child(b)
@@ -1535,9 +1548,9 @@ func _build_sheet() -> void:
 	foot.theme_type_variation = &"SoftLabel"
 	var left := run.target() - run.score
 	if run.phase == RunState.Phase.PLAY:
-		foot.text = "本季累计 %d / %d，%s" % [run.score, run.target(), ("还差 %d" % left) if left > 0 else "已达标"]
+		foot.text = "本季累计 %s / %s，%s" % [Pulse.big(run.score), Pulse.big(run.target()), ("还差 %s" % Pulse.big(left)) if left > 0 else "已达标"]
 	else:
-		foot.text = "本季累计 %d / %d" % [run.score, run.target()]
+		foot.text = "本季累计 %s / %s" % [Pulse.big(run.score), Pulse.big(run.target())]
 	sheet_box.add_child(foot)
 
 

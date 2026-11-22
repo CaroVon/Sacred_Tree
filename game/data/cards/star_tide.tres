@@ -15,5 +15,5 @@ price = 4
 rarity = 0
 family = Array[StringName]([&"star"])
 keywords = Array[StringName]([&"conduct", &"timing"])
-desc = "奇数回合 ×3，偶数回合不变"
-odd_turn_mul = 3
+desc = "奇数回合 ×2.2，偶数回合不变"
+odd_turn_mul = 2.2

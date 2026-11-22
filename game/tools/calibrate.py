@@ -4,8 +4,9 @@
   python game/tools/calibrate.py real 60          # 按当前目标跑，报告每个流派的通关率
   python game/tools/calibrate.py free 60          # 忽略目标跑满三年，按分位数建议目标
   python game/tools/calibrate.py free 60 --q 0.3  # 建议目标取全部流派合并后的第 30 百分位
+  python game/tools/calibrate.py real 150 --no-legendary   # 卡池里去掉传说牌（量化传说的贡献）
 
-输出里的“建议目标”可以直接贴进 core/rules.gd 的 TARGETS（第 1 年四季保持不动）。
+输出里的“建议目标”可以直接贴进 core/rules.gd 的 TARGETS（已按梯度约束后处理）。
 """
 import os
 import subprocess
@@ -16,13 +17,45 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 GODOT = os.path.join(ROOT, 'tools', 'godot', 'Godot_v4.7.2-stable_win64_console.exe')
 FAMILIES = ['wood', 'gear', 'forge', 'star', 'coin', 'mirror', 'seal']
 SEASONS = ['春', '夏', '秋', '冬', '天灾']
-# 第 1 年四季目标保持不动（用户决定）
-FIXED = {(1, 1): 50, (1, 2): 180, (1, 3): 500, (1, 4): 1200}
+# 2026-11-22 用户决定：全阶段目标都参与校准（第 1 年不再固定），并强化梯度。
+FIXED = {}
+# 梯度约束：季内每季 ≥ 上一季 ×SEASON_STEP；天灾季 ≥ 冬季；每年春 ≥ 上一年春 ×YEAR_STEP。
+# （春季树心输出回落到 ×1，天然比上一年天灾低，所以跨年按春对春比较。）
+SEASON_STEP = 2.5
+YEAR_STEP = 8.0
+
+
+def enforce_gradient(t):
+    """梯度约束（从后往前）：以后期分位数为锚，压低早期目标，保证陡峭。t: {(年, 季): 目标}。"""
+    for y in (3, 2, 1):
+        if y < 3:
+            t[(y, 1)] = min(t[(y, 1)], t[(y + 1, 1)] / YEAR_STEP)
+        t[(y, 4)] = min(t[(y, 4)], t[(y, 5)])
+        for s in (3, 2, 1):
+            t[(y, s)] = min(t[(y, s)], t[(y, s + 1)] / SEASON_STEP)
+        if y < 3:
+            t[(y, 1)] = min(t[(y, 1)], t[(y + 1, 1)] / YEAR_STEP)
+    for k in t:
+        t[k] = nice(t[k])
+    return t
+
+
+def nice_up(v):
+    """向上取两位有效数字。"""
+    if v < 100:
+        return int(v)
+    s = len(str(int(v))) - 2
+    q = 10 ** s
+    return int(-(-int(v) // q) * q)
+
+
+NOLEGEND = '--no-legendary' in sys.argv
+NOPICK = '--no-pick' in sys.argv
 
 
 def run(family, mode, runs, seed0):
     cmd = [GODOT, '--headless', '--path', os.path.join(ROOT, 'game'), '-s', 'tools/balance_sim.gd', '--',
-           str(runs), 'planner', mode, str(seed0), family, 'raw']
+           str(runs), 'planner', mode, str(seed0), family, 'raw'] + (['nolegend'] if NOLEGEND else []) + (['nopick'] if NOPICK else [])
     out = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=3600).stdout
     raw, ends = [], []
     for line in out.splitlines():
@@ -88,10 +121,13 @@ def main():
             key = (y, s)
             if key not in by_stage:
                 continue
-            t = FIXED.get(key, nice(pct(by_stage[key], q)))
-            targets[key] = t
+            targets[key] = FIXED.get(key, nice(pct(by_stage[key], q)))
+    enforce_gradient(targets)
+    for y in (1, 2, 3):
+        for s in range(1, 6):
+            key = (y, s)
             meds = '  '.join('%-9d' % pct(per_fam.get((f, y, s), [0]), 0.5) for f in fams)
-            print('%d年%-4s     %s  %d' % (y, SEASONS[s - 1], meds, t))
+            print('%d年%-4s     %s  %d' % (y, SEASONS[s - 1], meds, targets[key]))
     print('\nTARGETS := [')
     for y in (1, 2, 3):
         print('\t[%s],' % ', '.join(str(targets.get((y, s), 0)) for s in range(1, 6)))

@@ -16,7 +16,7 @@ const FORGE_RES := [1.0, 2.0, 3.0, 4.0]
 const STAR_RES := [1.0, 1.1, 1.25, 1.5]
 const COIN_RES := [0, 2, 3, 5]
 const MIRROR_RES := [0.0, 0.3, 0.6, 1.0]
-const SEAL_RES := [0.0, 0.5, 1.0, 2.0]
+const SEAL_RES := [0.0, 1.0, 1.75, 2.75]
 ## 共鸣说明（界面用）：每层的效果。
 ## 共鸣说明（界面用），数字直接取自上面的常量。
 static func resonance_desc(f: StringName) -> String:
@@ -151,6 +151,13 @@ class Result:
 	var stored_total: int = 0
 	## 牌桌上对称的同类牌对数。
 	var pairs: int = 0
+	## 牌桌上有逆行（星辰牌每回合都按最后一回合算）。
+	var retro: bool = false
+	## 牌桌上有永动机。
+	var link_all: bool = false
+	var link_all_cap: int = 0
+	## 万象镜映出的幻影数。
+	var phantoms: int = 0
 	# 仅 Context.explain 为真时填充：
 	var trace: Dictionary = {}      # Vector2i -> Array[{label, op, result}]，节点流出养分的算式
 	var tip_trace: Dictionary = {}  # Vector2i -> Array[...]，末梢收获的算式
@@ -172,6 +179,16 @@ static func resolve(tree: TreeModel, ctx: Context) -> Result:
 	var forge_f: float = FORGE_RES[res.resonance.get(&"forge", 0)]
 	res.pairs = sym_pairs(tree, ctx.pairs_any)
 	var lines := star_lines(tree) if ctx.patterns else {}
+	var phantom_x := 0.0
+	for n in list:
+		if n.is_seed():
+			continue
+		if n.def().retro:
+			res.retro = true
+		if n.def().link_all:
+			res.link_all = true
+			res.link_all_cap = maxi(res.link_all_cap, n.def().link_all_cap)
+		phantom_x = maxf(phantom_x, n.def().phantom_mirror)
 
 	for n in list:
 		if n.is_seed():
@@ -195,7 +212,7 @@ static func resolve(tree: TreeModel, ctx: Context) -> Result:
 				v *= inflows.size()
 				if ex: tr.append(_step("枢纽", "×%d（父牌数）" % inflows.size(), v))
 			if ctx.graft_mult != 1.0:
-				v = int(floor(v * ctx.graft_mult))
+				v = to_int((v * ctx.graft_mult))
 				if ex: tr.append(_step("嫁接刀", "×%s" % num(ctx.graft_mult), v))
 			if loops.has(n.key):
 				v *= 2
@@ -224,7 +241,7 @@ static func resolve(tree: TreeModel, ctx: Context) -> Result:
 						v += m.def().aura_conduct
 						if ex: tr.append(_step("相邻的" + m.def().display_name, "+%d" % m.def().aura_conduct, v))
 			if def.category == CardDef.Category.END and ctx.end_mult != 1.0:
-				v = int(floor(v * ctx.end_mult))
+				v = to_int((v * ctx.end_mult))
 				if ex: tr.append(_step("秋季", "×%s" % num(ctx.end_mult), v))
 		match tree.land_at(n.key):
 			Land.Type.FERTILE:
@@ -343,7 +360,7 @@ static func resolve(tree: TreeModel, ctx: Context) -> Result:
 				tt.append(_step(src[0], "+%d" % src[1], run_c))
 		c += int(res.bonus.get(t, 0))
 		if tip_mul.has(t):
-			c = int(floor(c * float(tip_mul[t])))
+			c = to_int((c * float(tip_mul[t])))
 			if ex: tt.append(_step("相邻的擒纵", "×%s" % num(tip_mul[t]), c))
 		# 长茎：从树心到这个末梢连续 6 张以上
 		var tnode := tree.at(t)
@@ -366,6 +383,19 @@ static func resolve(tree: TreeModel, ctx: Context) -> Result:
 			res.total += c
 		if ex:
 			res.tip_trace[t] = tt
+
+	# 万象镜：没有对称牌的末梢在对面映出幻影
+	if phantom_x > 0.0:
+		var extra := 0
+		for t in res.contrib:
+			if res.sealed.has(t) or t == TreeModel.SEED_KEY or tree.at(-t) != null:
+				continue
+			extra += to_int((int(res.contrib[t]) * phantom_x))
+			res.phantoms += 1
+		if extra > 0:
+			res.total += extra
+			res.pairs += res.phantoms / 3
+			if ex: res.total_trace.append(_step("万象镜 %d 个幻影" % res.phantoms, "+%d" % extra, 0))
 
 	if ctx.patterns:
 		if not long_tips.is_empty():
@@ -415,7 +445,7 @@ static func resolve(tree: TreeModel, ctx: Context) -> Result:
 	res.total_mult *= ctx.total_mult
 	res.raw_total = res.total
 	if res.total_mult != 1.0:
-		res.total = int(floor(res.total * res.total_mult))
+		res.total = to_int((res.total * res.total_mult))
 	return res
 
 
@@ -426,6 +456,11 @@ static func _modifiers(tree: TreeModel, n: TreeNode, def: CardDef, v: int, ctx: 
 		gear_f: float, forge_f: float, tr) -> int:
 	if def.adj_family_add != 0 or def.adj_family_mul != 0.0:
 		var adj := adjacent_family(tree, n)
+		if res.link_all and def.has_family(&"gear"):
+			var all_g := mini(res.link_all_cap, int(res.family_counts.get(&"gear", 0)) - 1)
+			if all_g > adj:
+				adj = all_g
+				if tr != null: tr.append(_step("永动机", "按 %d 张相邻算" % adj, v))
 		if adj > 0:
 			if def.adj_family_add != 0:
 				var per := def.adj_family_add + (ctx.link_extra if def.has_family(&"gear") else 0)
@@ -433,18 +468,18 @@ static func _modifiers(tree: TreeModel, n: TreeNode, def: CardDef, v: int, ctx: 
 				if tr != null: tr.append(_step("联动 %d 张" % adj, "+%s" % num(per * adj * gear_f), v))
 			if def.adj_family_mul != 0.0:
 				var m := 1.0 + def.adj_family_mul * adj * gear_f
-				v = int(floor(v * m))
+				v = to_int((v * m))
 				if tr != null: tr.append(_step("联动 %d 张" % adj, "×%s" % num(m), v))
 	if def.family_count_mul != 0.0:
 		var cnt := 0
 		for f in def.families():
 			cnt = maxi(cnt, int(res.family_counts.get(f, 0)))
 		var m := 1.0 + def.family_count_mul * cnt
-		v = int(floor(v * m))
+		v = to_int((v * m))
 		if tr != null: tr.append(_step("同流派 %d 张" % cnt, "×%s" % num(m), v))
 	if def.heat_mul != 0.0 and ctx.heat > 0:
 		var m := 1.0 + def.heat_mul * ctx.heat * forge_f
-		v = int(floor(v * m))
+		v = to_int((v * m))
 		if tr != null: tr.append(_step("火候 %d" % ctx.heat, "×%s" % num(m), v))
 	if def.burned_add != 0.0 and ctx.burned_total > 0:
 		v += int(def.burned_add * ctx.burned_total)
@@ -455,9 +490,12 @@ static func _modifiers(tree: TreeModel, n: TreeNode, def: CardDef, v: int, ctx: 
 ## 星辰、商会、镜像、封印的修饰器。
 static func _modifiers2(tree: TreeModel, n: TreeNode, def: CardDef, v: int, ctx: Context, res: Result, tr) -> int:
 	if ctx.eclipse and def.has_family(&"star"):
-		if tr != null: tr.append(_step("日蚀", "流出 0", 0))
-		return 0
+		v = to_int(v * ECLIPSE_MULT)
+		if tr != null: tr.append(_step("日蚀", "×%s" % num(ECLIPSE_MULT), v))
 	var turn := ctx.turn + (ctx.star_turn_bonus if def.has_family(&"star") else 0)
+	if res.retro and def.has_family(&"star") and turn < ctx.turns_total:
+		turn = ctx.turns_total
+		if tr != null: tr.append(_step("逆行", "按第 %d 回合算" % turn, v))
 	if def.turn_add != 0.0:
 		v += int(def.turn_add * turn)
 		if tr != null: tr.append(_step("第 %d 回合" % turn, "+%s" % num(def.turn_add * turn), v))
@@ -465,10 +503,10 @@ static func _modifiers2(tree: TreeModel, n: TreeNode, def: CardDef, v: int, ctx:
 		v *= turn
 		if tr != null: tr.append(_step("第 %d 回合" % turn, "×%d" % turn, v))
 	if def.odd_turn_mul != 0.0 and turn % 2 == 1:
-		v = int(floor(v * def.odd_turn_mul))
+		v = to_int((v * def.odd_turn_mul))
 		if tr != null: tr.append(_step("奇数回合", "×%s" % num(def.odd_turn_mul), v))
 	if def.last_turn_mult != 0.0 and turn >= ctx.turns_total:
-		v = int(floor(v * def.last_turn_mult))
+		v = to_int((v * def.last_turn_mult))
 		if tr != null: tr.append(_step("本季最后一回合", "×%s" % num(def.last_turn_mult), v))
 	if def.season_mul:
 		var sm := mini(ctx.season, 4)
@@ -479,7 +517,7 @@ static func _modifiers2(tree: TreeModel, n: TreeNode, def: CardDef, v: int, ctx:
 		if tr != null: tr.append(_step("养分 %d" % ctx.sap, "+%s" % num(def.sap_add * ctx.sap), v))
 	if def.sap_mul != 0.0 and ctx.sap > 0:
 		var m := 1.0 + def.sap_mul * ctx.sap
-		v = int(floor(v * m))
+		v = to_int((v * m))
 		if tr != null: tr.append(_step("养分 %d" % ctx.sap, "×%s" % num(m), v))
 	if def.pulse_cost > 0 and ctx.sap < def.pulse_cost:
 		v = 0
@@ -491,14 +529,14 @@ static func _modifiers2(tree: TreeModel, n: TreeNode, def: CardDef, v: int, ctx:
 		v *= ctx.relic_count + 1
 		if tr != null: tr.append(_step("器物 %d 件" % ctx.relic_count, "×%d" % (ctx.relic_count + 1), v))
 	if def.calamity_mult != 0.0 and Rules.is_calamity(ctx.season):
-		v = int(floor(v * def.calamity_mult))
+		v = to_int((v * def.calamity_mult))
 		if tr != null: tr.append(_step("天灾季", "×%s" % num(def.calamity_mult), v))
 	var mirror := tree.at(-n.key)
 	if def.mirror_same_mult != 0.0 and mirror != null and mirror.type == n.type:
-		v = int(floor(v * def.mirror_same_mult))
+		v = to_int((v * def.mirror_same_mult))
 		if tr != null: tr.append(_step("对面同类", "×%s" % num(def.mirror_same_mult), v))
 	if def.mirror_copy != 0.0 and res.out.has(-n.key):
-		var mv := int(floor(int(res.out[-n.key]) * def.mirror_copy))
+		var mv := to_int((int(res.out[-n.key]) * def.mirror_copy))
 		if mv > v:
 			v = mv
 			if tr != null: tr.append(_step("映照对面", "取 %d" % mv, v))
@@ -560,6 +598,9 @@ static func adjacent_family(tree: TreeModel, n: TreeNode) -> int:
 static func family_counts(tree: TreeModel) -> Dictionary:
 	var out := {}
 	var wilds := 0
+	var partner := 0
+	var partner_cap := 0
+	var others := 0
 	for n: TreeNode in tree.nodes.values():
 		if n.is_seed():
 			continue
@@ -567,6 +608,14 @@ static func family_counts(tree: TreeModel) -> Dictionary:
 			out[f] = int(out.get(f, 0)) + 1
 		if n.def().wild:
 			wilds += 1
+		if not n.def().has_family(&"coin"):
+			others += 1
+		if n.def().partner_per > 0:
+			partner = n.def().partner_per if partner == 0 else mini(partner, n.def().partner_per)
+			partner_cap = maxi(partner_cap, n.def().partner_cap)
+	# 合伙契约：每 x 张非商会牌算 1 张商会牌
+	if partner > 0 and others >= partner:
+		out[&"coin"] = int(out.get(&"coin", 0)) + mini(others / partner, partner_cap)
 	# 幻影：逐张加到离下一阈值最近的流派上（木和镜像自己除外）
 	for i in wilds:
 		var best := &""
@@ -613,6 +662,29 @@ static func _name(n: TreeNode) -> String:
 
 
 ## 数字的简短写法：2 → "2"，2.5 → "2.5"。
+## 分数上限：浮点转整数前先夹住，防止 int64 回绕（留足余量给求和）。
+const SCORE_CAP := 1000000000000000
+## 日蚀：星辰牌流出倍率。
+const ECLIPSE_MULT := 0.25
+
+
+## 向下取整并夹到 [−SCORE_CAP, SCORE_CAP]。
+static func to_int(f: float) -> int:
+	return int(floor(clampf(f, -SCORE_CAP, SCORE_CAP)))
+
+
+## 大数显示：100 万以下写整数，以上写科学计数法（三位有效数字，如 3.27e8）。
+static func big(v: float) -> String:
+	if absf(v) < 1000000.0:
+		return str(int(v))
+	var e := int(floor(log(absf(v)) / log(10.0)))
+	var m := v / pow(10.0, e)
+	if absf(m) >= 9.995:
+		m /= 10.0
+		e += 1
+	return "%.2fe%d" % [m, e]
+
+
 static func num(x: float) -> String:
 	if is_equal_approx(x, roundf(x)):
 		return str(int(roundf(x)))

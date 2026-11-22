@@ -39,6 +39,11 @@ func _run(scene: String, out: String, turns: int, run_seed: int) -> void:
 			for id in [&"gear_cog", &"gear_link", &"gear_hub", &"forge_furnace", &"gear_escape", &"gear_core", &"forge_bellows"]:
 				r2.hand.append(id)
 				r2.hand_fresh.append(false)
+	# bignum：第 3 年冬季、累计 3.27e8，看科学计数法显示
+	if OS.get_cmdline_user_args().has("bignum"):
+		game.run.year = 3
+		game.run.season = 4
+		game.run.score = 327000000
 	if scene == "event":
 		game.run.phase = RunState.Phase.EVENT
 		game.run.event_id = &"wanderer"

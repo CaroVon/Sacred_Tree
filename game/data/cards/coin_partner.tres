@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="CardDef" format=3]
+
+[ext_resource type="Script" path="res://core/card_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"coin_partner"
+display_name = "合伙契约"
+category = 2
+ports = PackedInt32Array()
+effect = 3
+value = 2.0
+color_key = &"coin"
+price = 6
+rarity = 2
+family = Array[StringName]([&"coin"])
+keywords = Array[StringName]([&"tip", &"sap"])
+desc = "×2，末端；合伙：牌桌上每 4 张非商会牌，也算 1 张商会牌计入共鸣（最多多算 2 张）"
+partner_per = 4
+partner_cap = 2

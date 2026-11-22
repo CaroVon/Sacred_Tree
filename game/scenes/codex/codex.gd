@@ -274,7 +274,7 @@ func _render_card_demo() -> void:
 	var cmp := ""
 	if current != &"stem":
 		cmp = "\n这棵树放%s时得 %d 分；换成%s得 %d 分。" % [def.display_name, with_me, "茎" if not def.is_graft() else "不放", as_stem]
-	note_l.text = "%s 本回合得分 %d。%s\n把鼠标移到牌上，看养分怎样一步步流过来。" % [d.note, res.total, cmp]
+	note_l.text = "%s 本回合得分 %s。%s\n把鼠标移到牌上，看养分怎样一步步流过来。" % [d.note, Pulse.big(res.total), cmp]
 	_show_focus_chain(res, tree)
 	board.play_pulse(tree, res, false)
 

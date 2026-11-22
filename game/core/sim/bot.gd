@@ -32,6 +32,17 @@ var policy: Policy = Policy.GREEDY
 var focus: StringName = &""
 
 
+## 每回合最多尝试几次「剪枝 / 重抽」来解套（养分很多时防止无限重抽）。
+const MAX_UNSTICK := 3
+
+## 卡池最高稀有度（1 = 禁用传说，用来量化传说的贡献）。
+var max_rarity: int = 2
+## 天灾后的传说之选（关掉用来区分「保底」与「传说本身」的影响）。
+var legend_pick: bool = true
+## 卡池里禁用的牌（逐张排除，测某张牌的影响）。
+var banned: Array[StringName] = []
+
+
 static func make(p: Policy, focus_family: StringName = &"") -> Bot:
 	var b := Bot.new()
 	b.policy = p
@@ -46,6 +57,9 @@ static func make(p: Policy, focus_family: StringName = &"") -> Bot:
 func run_game(run_seed: int, ignore_targets: bool = false) -> Dictionary:
 	var s := RunState.create(run_seed, STARTER_FOR.get(focus, &"gardener"))
 	s.ignore_targets = ignore_targets
+	s.max_rarity = max_rarity
+	s.legend_pick = legend_pick
+	s.banned = banned
 	var stages := []
 	var guard := 0
 	while s.phase != RunState.Phase.LOST and s.phase != RunState.Phase.WON:
@@ -85,10 +99,12 @@ func run_game(run_seed: int, ignore_targets: bool = false) -> Dictionary:
 # ---------- 回合 ----------
 
 func play_turn(s: RunState) -> void:
+	var unsticks := 0
 	while s.plays > 0 and s.phase == RunState.Phase.PLAY:
 		var best := _best_placement(s)
 		if best.is_empty():
-			if policy == Policy.PLANNER and _unstick(s):
+			unsticks += 1
+			if policy == Policy.PLANNER and unsticks <= MAX_UNSTICK and _unstick(s):
 				continue
 			return
 		if not s.place(best.i, best.k):

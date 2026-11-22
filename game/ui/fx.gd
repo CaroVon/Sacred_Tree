@@ -80,12 +80,13 @@ static func stamp(card: CardView) -> void:
 static func count_to(label: Label, to: int, dur: float = 0.5) -> void:
 	if label == null or not is_instance_valid(label):
 		return
-	var from := label.text.to_int()
+	var from: int = label.get_meta(&"num", label.text.to_int())
+	label.set_meta(&"num", to)
 	if from == to or Game.reduce_motion or dur <= 0.0:
-		label.text = str(to)
+		label.text = Pulse.big(to)
 		return
 	var tw := label.create_tween()
-	tw.tween_method(func(v: float): label.text = str(int(round(v))), float(from), float(to), dur).set_trans(Tween.TRANS_CUBIC)
+	tw.tween_method(func(v: float): label.text = Pulse.big(roundf(v)), float(from), float(to), dur).set_trans(Tween.TRANS_CUBIC)
 
 
 ## 震动：给节点加一个 shake_t 属性，由它自己决定怎么抖。

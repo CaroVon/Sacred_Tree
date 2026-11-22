@@ -118,7 +118,40 @@ func test_lightning_cuts_longest_branch() -> void:
 		prev = c
 	Growth.place(s.tree, &"stem", Hex.DIRS[3], _t([Vector2i.ZERO], 3))
 	s._lightning()
-	check_eq(s.tree.size(), 1 + 1 + 1, "seed + short branch + first stem of long branch")
+	check_eq(s.tree.size(), 1 + 1 + 2, "seed + short branch + 2 stems of long branch remain")
+	check_eq(s.calamity_removed, 2)
+
+
+func test_calamity_remove_cap() -> void:
+	var s := _bare_run()
+	for d in 6:
+		Growth.place(s.tree, &"stem", Hex.DIRS[d], _t([Vector2i.ZERO], d))
+	for i in 3:
+		s._pests()
+	check_eq(s.tree.size(), 1 + 6 - Rules.CALAMITY_REMOVE_CAP, "pests stop at the season cap")
+	s._wildfire()
+	check_eq(s.tree.size(), 1 + 6 - Rules.CALAMITY_REMOVE_CAP, "cap shared across calamity effects")
+	s._start_season()
+	s._wildfire()
+	check_eq(s.tree.size(), 1 + 6 - Rules.CALAMITY_REMOVE_CAP - 1, "cap resets each season")
+
+
+func test_targets_gradient() -> void:
+	for y in range(1, Rules.YEARS + 1):
+		for st in range(2, 5):
+			check(Rules.target(st, y) >= Rules.target(st - 1, y) * 2.5, "y%d s%d steep" % [y, st])
+		check(Rules.target(5, y) >= Rules.target(4, y), "y%d calamity >= winter" % y)
+		if y > 1:
+			check(Rules.target(1, y) >= Rules.target(1, y - 1) * 8, "y%d spring >= last spring x8" % y)
+
+
+func test_big_number_format() -> void:
+	check_eq(Pulse.big(999999), "999999")
+	check_eq(Pulse.big(1000000), "1.00e6")
+	check_eq(Pulse.big(327000000), "3.27e8")
+	check_eq(Pulse.big(9999000), "1.00e7")
+	check_eq(Pulse.to_int(1e30), Pulse.SCORE_CAP)
+	check(Pulse.to_int(1e30) > 0)
 
 
 func test_pests_bite_tip() -> void:
@@ -156,6 +189,9 @@ func test_year_flow_to_market_and_next_year() -> void:
 	check_eq(s.relic_options.size(), Rules.RELIC_CHOICES)
 	s.choose_relic(0)
 	check_eq(s.relics.size(), 1)
+	check_eq(s.phase, RunState.Phase.REWARD, "legend pick after relic")
+	check(s.legend_reward, "legend pick")
+	s.skip_reward()
 	check_eq(s.phase, RunState.Phase.MARKET)
 	check_eq(s.market_cards.size(), Rules.MARKET_CARD_OFFERS)
 	var land_before := s.tree.land.size()
@@ -185,6 +221,7 @@ func test_win_after_three_years() -> void:
 				_skip_event(s)
 			elif s.phase == RunState.Phase.RELIC:
 				s.skip_relic()
+				s.skip_reward()
 			s.leave_market()
 			_resolve_discard(s)
 	check_eq(s.phase, RunState.Phase.WON)

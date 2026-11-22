@@ -15,5 +15,5 @@ price = 4
 rarity = 1
 family = Array[StringName]([&"coin"])
 keywords = Array[StringName]([&"tip", &"sap"])
-desc = "×2，末端；被剪掉时额外得到它流出一半的养分"
+desc = "×2，末端；被剪掉时额外得到它流出一半的养分（最多 30）"
 prune_out_sap = 0.5

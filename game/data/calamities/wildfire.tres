@@ -6,4 +6,4 @@
 script = ExtResource("1")
 id = &"wildfire"
 display_name = "山火"
-desc = "每次脉动后烧掉最老的一个末梢（坚韧的除外）；烧掉的牌是燃料"
+desc = "每次脉动后烧掉最老的一个末梢（坚韧的除外），本季最多 2 张；烧掉的牌是燃料"

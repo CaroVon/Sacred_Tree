@@ -10,16 +10,21 @@ const RADII := [5, 6, 7]
 const YEARS := 3
 const STAGES := 5          # 每年的季数（含天灾季）
 const CALAMITY_STAGE := 5
-## 每年每季的目标。第一年前四季与网页原型一致；其余由 tools/balance_sim.gd 校准：
-## 规划者策略通关约 50%，贪心策略基本过不了第一年天灾。
+## 每年每季的目标。由 tools/calibrate.py 校准（2026-11-22 起全阶段参与，含第 1 年）：
+## 梯度：季内每季 ≥ 上一季 ×2.5，天灾季 ≥ 冬季（每年的高潮），每年春 ≥ 上一年春 ×8。
+## 难度锚点：规划者 bot 有传说通关约 50%，无传说 ≥ 35%。
 const TARGETS := [
-	[50, 180, 500, 1200, 1000],
-	[3000, 9000, 35000, 70000, 40000],
-	[60000, 130000, 550000, 1000000, 400000],
+	[87, 220, 550, 1400, 1400],
+	[2600, 9500, 24000, 60000, 60000],
+	[60000, 300000, 800000, 2000000, 2000000],
 ]
 const SEASON_NAMES: Array[String] = ["春", "夏", "秋", "冬", "天灾"]
 const TURNS := 5
 const CALAMITY_TURNS := 3
+## 每个天灾季，天灾最多从牌桌上移走几张牌（控制破坏强度）。
+const CALAMITY_REMOVE_CAP := 2
+## 雷击劈断的枝最多几张。
+const LIGHTNING_CUT := 2
 const HAND := 6
 const PLAYS := 3
 const PRUNES := 1
@@ -34,6 +39,12 @@ const CALAMITY_CLEAR_SAP := 8
 ## 提前收获：本季每剩 1 回合得多少养分。
 const HARVEST_SAP_PER_TURN := 2
 ## 器物槽数量；出售器物返还的比例。
+## 天灾季后传说三选一的选项数。
+## 当铺这类「剪掉时按流出得养分」的牌，每张最多得这么多（防止养分滚雪球）。
+const PRUNE_OUT_SAP_CAP := 30
+const LEGEND_CHOICES := 3
+## 传说之选是否每年都有（否则只在第 1 年天灾之后）。
+const LEGEND_EVERY_YEAR := false
 const RELIC_SLOTS := 6
 const RELIC_SELL_RATIO := 0.5
 
@@ -84,7 +95,7 @@ static func seed_out(season: int, year: int = 1) -> int:
 const SEASON_TRAITS: Array[String] = [
 	"每回合多抽 1 张", "每回合多放 1 张", "末端牌流出养分 ×1.5", "季末最老的 %d 个末梢枯萎", "",
 ]
-const WINTER_WITHER := 3
+const WINTER_WITHER := 2
 
 
 static func season_trait(season: int) -> String:

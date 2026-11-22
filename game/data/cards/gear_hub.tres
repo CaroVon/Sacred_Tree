@@ -9,13 +9,13 @@ display_name = "枢纽"
 category = 4
 ports = PackedInt32Array()
 effect = 5
-value = 2.0
+value = 1.5
 color_key = &"steel"
 price = 7
-rarity = 2
+rarity = 1
 family = Array[StringName]([&"gear"])
 keywords = Array[StringName]([&"link"])
-desc = "放在挨着 2 张以上齿轮牌的空格，把它们接起来：流出 = 它们的流出之和 ×2 × 张数"
+desc = "放在挨着 2 张以上齿轮牌的空格，把它们接起来：流出 = 它们的流出之和 ×1.5 × 张数"
 graft_count_mul = true
 graft_sum = true
 graft_family = &"gear"

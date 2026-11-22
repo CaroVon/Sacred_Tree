@@ -6,4 +6,4 @@
 script = ExtResource("1")
 id = &"pests"
 display_name = "虫害"
-desc = "每次脉动后随机咬掉一个末梢（坚韧的除外）"
+desc = "每次脉动后随机咬掉一个末梢（坚韧的除外），本季最多 2 张"

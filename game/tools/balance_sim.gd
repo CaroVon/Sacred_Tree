@@ -16,6 +16,14 @@ func _initialize() -> void:
 	var out := a[5] if a.size() > 5 and a[5] != "raw" else ""
 	var t0 := Time.get_ticks_msec()
 	var bot := Bot.make(policy, focus)
+	if a.has("nolegend"):
+		bot.max_rarity = 1
+	for x in a:
+		if x.begins_with("ban="):
+			for id in x.substr(4).split(","):
+				bot.banned.append(StringName(id))
+	if a.has("nopick"):
+		bot.legend_pick = false
 	var results := []
 	for r in runs:
 		results.append(bot.run_game(seed0 + r, free))

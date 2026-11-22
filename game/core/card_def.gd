@@ -157,6 +157,21 @@ const CATEGORY_NAMES := ["传导", "分枝", "末端", "相邻", "嫁接", "时�
 ## 天生坚韧：不会枯萎，也不会被天灾伤害。
 @export var innate_tough: bool = false
 
+@export_group("传说：改写规则")
+## 浴火（凤凰羽）：牌桌上有它时，剪下 / 烧掉回到手牌的牌当回合就能再打出。
+@export var burn_fresh: bool = false
+## 逆行：星辰牌把每一回合都当作本季最后一回合。
+@export var retro: bool = false
+## 永动机：齿轮牌把牌桌上其他齿轮牌都算作相邻（最多 link_all_cap 张）。
+@export var link_all: bool = false
+@export var link_all_cap: int = 6
+## 合伙契约：牌桌上每 x 张非商会牌，也算 1 张商会牌计入共鸣。
+@export var partner_per: int = 0
+## 合伙契约最多多算几张商会牌。
+@export var partner_cap: int = 99
+## 万象镜：没有对称牌的末梢在对面映出幻影，额外计入收获 ×x；每三个幻影算一对对称。
+@export var phantom_mirror: float = 0.0
+
 const FAMILY_NAMES := {
 	&"wood": "木", &"gear": "齿轮", &"forge": "熔炉", &"star": "星辰",
 	&"coin": "商会", &"mirror": "镜像", &"seal": "封印",

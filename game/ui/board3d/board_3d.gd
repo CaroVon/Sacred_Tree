@@ -1218,7 +1218,7 @@ func _draw() -> void:
 				var glow_a := clampf(1.0 - dt * 2.5, 0.0, 1.0)
 				if glow_a > 0.0:
 					draw_circle(p, s * (0.7 + dt * 1.2), Color("#F2C46A", 0.32 * glow_a))
-				_text_outlined(title, p + Vector2(0, -s * 1.1 - rise), "+%d" % pulse.contrib[n.key],
+				_text_outlined(title, p + Vector2(0, -s * 1.1 - rise), "+%s" % Pulse.big(pulse.contrib[n.key]),
 					int((22 + 8 * clampf(1.0 - dt * 3.0, 0.0, 1.0)) * k), Palette.TERRA)
 		elif flash.has(n.key) and not tracing and n.key != hover:
 			_text_outlined(body, p + Vector2(0, -s * 1.05), "+%d" % flash[n.key], int(15 * k), Color(Palette.TERRA, 0.85))
@@ -1311,7 +1311,7 @@ func _draw_diagram(t: TreeModel, pulse: Pulse.Result, k: float, a: float) -> voi
 		_text_outlined(Palette.title_for(def.display_name), p + Vector2(0, 5 * k), def.display_name, int(fs * k), Color(Palette.INK, a), halo)
 		_text_outlined(body, p + Vector2(0, -12 * k), Pulse.effect_text(def, n), int(10 * k), Color(col.darkened(0.25), a), halo)
 		if is_tip and pulse.contrib.has(c):
-			_text_outlined(body, p + Vector2(0, 20 * k), "收 %d" % pulse.contrib[c], int(11 * k), Color(Palette.TERRA, a), halo)
+			_text_outlined(body, p + Vector2(0, 20 * k), "收 %s" % Pulse.big(pulse.contrib[c]), int(11 * k), Color(Palette.TERRA, a), halo)
 		else:
 			_text_outlined(body, p + Vector2(0, 20 * k), str(v), int(11 * k), Color(Palette.INK, a), halo)
 		if not n.marks.is_empty():
@@ -1337,7 +1337,7 @@ func _draw_node_card(n: TreeNode, pulse: Pulse.Result, k: float) -> void:
 		lines.append([Pulse.effect_text(def, n) + "　" + def.desc, int(13 * sk), Palette.SOFT, body])
 		if pulse:
 			if pulse.tips.has(n.key) and pulse.contrib.has(n.key):
-				lines.append(["末梢收获 %d" % pulse.contrib[n.key], int(15 * sk), Palette.TERRA, body])
+				lines.append(["末梢收获 %s" % Pulse.big(pulse.contrib[n.key]), int(15 * sk), Palette.TERRA, body])
 			else:
 				lines.append(["流出 %d" % pulse.out.get(n.key, 0), int(15 * sk), Palette.INK, body])
 		if not n.marks.is_empty():
@@ -1387,4 +1387,4 @@ func _draw_trace3d(t: TreeModel, pulse: Pulse.Result, s: float, k: float, trace_
 		if label != "":
 			_pill(center_of(x) + Vector2(0, -s * 1.05), label, int(13 * k), Palette.OLIVE.darkened(0.2), Color(Palette.SHEET, 0.96))
 	if pulse and pulse.tips.has(trace_target) and trace_reached >= _trace_depth + 0.6:
-		_pill(_proj(_wpos(trace_target, 0.0)) + Vector2(0, s * 0.7), "收获 %d" % pulse.contrib[trace_target], int(14 * k), Palette.TERRA.darkened(0.1), Color(Palette.SHEET, 0.96))
+		_pill(_proj(_wpos(trace_target, 0.0)) + Vector2(0, s * 0.7), "收获 %s" % Pulse.big(pulse.contrib[trace_target]), int(14 * k), Palette.TERRA.darkened(0.1), Color(Palette.SHEET, 0.96))

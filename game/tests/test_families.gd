@@ -298,7 +298,7 @@ func test_mirror_pairs_and_echo() -> void:
 	Growth.place(tree, &"stem", Hex.DIRS[1], _t([Vector2i.ZERO], 1))
 	Growth.place(tree, &"mirror_echo", Hex.DIRS[4], _t([Vector2i.ZERO], 4))
 	var res := Pulse.resolve(tree, _ctx())
-	check_eq(res.contrib[Hex.DIRS[4]], 4)
+	check_eq(res.contrib[Hex.DIRS[4]], 1 + int(Cards.get_def(&"mirror_echo").value))
 	var fr := Cards.get_def(&"mirror_frame")
 	var t2 := TreeModel.create(5)
 	Growth.place(t2, &"mirror_frame", Hex.DIRS[1], _t([Vector2i.ZERO], 1))
@@ -435,9 +435,14 @@ func test_new_lands() -> void:
 func test_new_calamities() -> void:
 	var s := _bare_run()
 	s.season = Rules.CALAMITY_STAGE
-	s.calamity = &"eclipse"
+	s.calamity = &"drought"
 	Growth.place(s.tree, &"star_sand", Hex.DIRS[1], _t([Vector2i.ZERO], 1))
-	check_eq(s.preview().total, 0, "eclipse silences star cards")
+	s.calamity = &"eclipse"
+	var dim: int = s.preview().contrib[Hex.DIRS[1]]
+	var c := s.ctx()
+	c.eclipse = false
+	var full: int = Pulse.resolve(s.tree, c).contrib[Hex.DIRS[1]]
+	check(dim < full and dim >= int(full * Pulse.ECLIPSE_MULT) - 1, "eclipse dims star cards (%d vs %d)" % [dim, full])
 	s.calamity = &"wildfire"
 	s.end_turn()
 	check_eq(s.tree.size(), 1, "wildfire burned the only tip")

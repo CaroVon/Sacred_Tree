@@ -6,4 +6,4 @@
 script = ExtResource("1")
 id = &"eclipse"
 display_name = "日蚀"
-desc = "成熟加成失效，星辰牌流出 0"
+desc = "成熟加成失效，星辰牌流出 ×0.25"

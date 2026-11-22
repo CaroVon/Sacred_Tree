@@ -119,7 +119,7 @@ func _ready() -> void:
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	col.add_child(spacer)
 	var go := Button.new()
-	go.text = "开始%s（目标 %d）" % [run.season_label(), run.target()]
+	go.text = "开始%s（目标 %s）" % [run.season_label(), Pulse.big(run.target())]
 	go.theme_type_variation = &"PrimaryButton"
 	go.add_theme_font_size_override("font_size", 26)
 	go.custom_minimum_size = Vector2(0, 62)

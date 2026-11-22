@@ -34,6 +34,8 @@ var prunes: int = Rules.PRUNES
 var transplants: int = Rules.TRANSPLANTS
 var phase: Phase = Phase.PLAY
 var reward_options: Array[StringName] = []
+## 当前的选牌是天灾季后的「传说三选一」。
+var legend_reward: bool = false
 var relic_options: Array[StringName] = []
 var relics: Array[StringName] = []
 ## 本年的天灾，以及已经出现过的天灾（尽量不重复）。
@@ -61,6 +63,14 @@ var bonus_transplants: int = 0
 var last_release: int = 0
 ## 平衡模拟用：不因未达标而失败（不存档）。
 var ignore_targets: bool = false
+## 卡池允许的最高稀有度（模拟用：1 = 禁用传说），不存档。
+var max_rarity: int = 2
+## 天灾后的传说之选（模拟用开关），不存档。
+var legend_pick: bool = true
+## 卡池里禁用的牌（模拟用），不存档。
+var banned: Array[StringName] = []
+## 本季天灾已经从牌桌上移走的牌数（上限 Rules.CALAMITY_REMOVE_CAP）。
+var calamity_removed: int = 0
 var last_pulse: Pulse.Result
 var log_lines: Array[String] = []
 
@@ -353,7 +363,7 @@ func prune(k: Vector2i) -> int:
 	var release_x := 0.0
 	for x in set:
 		var d := tree.at(x).def()
-		gain += int(floor(int(pr.out.get(x, 0)) * d.prune_out_sap))
+		gain += mini(int(floor(int(pr.out.get(x, 0)) * d.prune_out_sap)), Rules.PRUNE_OUT_SAP_CAP)
 		release_x = maxf(release_x, d.release_on_prune)
 	if release_x > 0.0:
 		var got := release_seals(release_x)
@@ -422,7 +432,7 @@ func end_turn() -> Pulse.Result:
 		return null
 	var res := preview()
 	last_pulse = res
-	score += res.total
+	score = mini(score + res.total, Pulse.SCORE_CAP)
 	next_tip_bonus = 0
 	next_total_mult = 1.0
 	sap -= mini(sap, res.sap_cost)
@@ -440,7 +450,7 @@ func end_turn() -> Pulse.Result:
 	_altars(res)
 	for n: TreeNode in tree.nodes.values():
 		n.age += 1
-	add_log("%s第 %d 回合脉动：%d 个末梢，得 %d" % [season_label(), turn, res.tip_list.size(), res.total])
+	add_log("%s第 %d 回合脉动：%d 个末梢，得 %s" % [season_label(), turn, res.tip_list.size(), Pulse.big(res.total)])
 	if has_relic(&"windkey"):
 		for n: TreeNode in tree.nodes.values():
 			n.age += 1
@@ -520,8 +530,8 @@ func release_seals(extra_mult: float = 1.0) -> int:
 		n.stored = 0
 		n.sealed = 0
 	if total > 0:
-		score += total
-		add_log("封存释放：+%d" % total)
+		score = mini(score + total, Pulse.SCORE_CAP)
+		add_log("封存释放：+%s" % Pulse.big(total))
 	last_release = total
 	return total
 
@@ -565,11 +575,17 @@ func wither(n: int) -> Array[Vector2i]:
 	return gone
 
 
+## 本季天灾还能移走几张牌。
+func calamity_budget() -> int:
+	return maxi(0, Rules.CALAMITY_REMOVE_CAP - calamity_removed)
+
+
 ## 虫害：脉动后随机咬掉一个末梢。
 func _pests() -> void:
 	var tips := _vulnerable_tips()
-	if tips.is_empty():
+	if tips.is_empty() or calamity_budget() <= 0:
 		return
+	calamity_removed += 1
 	var t := tips[rng.randi_range(0, tips.size() - 1)]
 	var name := Cards.get_def(t.type).display_name
 	_remove_to_hand({t.key: true})
@@ -579,8 +595,9 @@ func _pests() -> void:
 ## 山火：脉动后烧掉最老的一个末梢（回到弃牌堆，算燃料）。
 func _wildfire() -> void:
 	var tips := _vulnerable_tips()
-	if tips.is_empty():
+	if tips.is_empty() or calamity_budget() <= 0:
 		return
+	calamity_removed += 1
 	var name := Cards.get_def(tips[0].type).display_name
 	_remove_to_discard({tips[0].key: true})
 	add_log("山火：烧掉了%s" % name)
@@ -595,6 +612,9 @@ func _gale() -> void:
 	var name := Cards.get_def(t.type).display_name
 	var tg := Growth.transplant_targets(tree, t.key, ctx())
 	if tg.is_empty():
+		if calamity_budget() <= 0:
+			return
+		calamity_removed += 1
 		_remove_to_hand({t.key: true})
 		add_log("大风：把%s吹回了手牌" % name)
 		return
@@ -630,14 +650,19 @@ func _lightning() -> void:
 	tips.sort_custom(func(a, b): return a.depth > b.depth if a.depth != b.depth else a.order < b.order)
 	for t in tips:
 		var cut := t
-		while cut.depth > maxi(1, t.depth - 2) and not cut.parents.is_empty():
+		while cut.depth > maxi(1, t.depth - (Rules.LIGHTNING_CUT - 1)) and not cut.parents.is_empty():
 			cut = tree.at(cut.parents[0])
 		var set := Growth.subtree(tree, cut.key)
+		if set.size() > calamity_budget():
+			set = Growth.subtree(tree, t.key)
+		if set.size() > calamity_budget():
+			continue
 		var safe := true
 		for x in set:
 			if is_tough_at(tree.at(x)):
 				safe = false
 		if safe:
+			calamity_removed += set.size()
 			_remove_to_hand(set)
 			add_log("雷击：劈断了 %d 张牌（回到手牌，下回合可用）" % set.size())
 			_check_overflow()
@@ -660,8 +685,8 @@ func _burn(set: Dictionary) -> void:
 	for x in set:
 		spill += tree.at(x).stored
 	if spill > 0:
-		score += spill
-		add_log("封存随牌离开牌桌，立即释放 %d" % spill)
+		score = mini(score + spill, Pulse.SCORE_CAP)
+		add_log("封存随牌离开牌桌，立即释放 %s" % Pulse.big(spill))
 	var tier := res_tier(&"forge")
 	for x in set:
 		var d := tree.at(x).def()
@@ -680,19 +705,28 @@ func _burn(set: Dictionary) -> void:
 	sap += mint * set.size()
 
 
-## 离开牌桌的牌回到手牌（标记为下回合可用）；燃尽的牌本季移出。
+## 离开牌桌的牌回到手牌（标记为下回合可用；牌桌上有凤凰羽时当回合可用）；燃尽的牌本季移出。
 func _remove_to_hand(set: Dictionary) -> void:
 	var list: Array[TreeNode] = []
 	for x in set:
 		list.append(tree.at(x))
 	list.sort_custom(func(a: TreeNode, b: TreeNode): return a.order < b.order)
+	var fresh := not phoenix_on_board()
 	_burn(set)
 	for n in list:
 		if n.def().exhaust_on_prune:
 			exhausted.append(n.type)
 		else:
-			_add_hand(n.type, true)
+			_add_hand(n.type, fresh)
 	Growth.remove_set(tree, set)
+
+
+## 浴火：牌桌上有凤凰羽这类牌。
+func phoenix_on_board() -> bool:
+	for n: TreeNode in tree.nodes.values():
+		if not n.is_seed() and n.def().burn_fresh:
+			return true
+	return false
 
 
 func _pick_calamity() -> void:
@@ -712,7 +746,7 @@ func _pick_calamity() -> void:
 func _end_season() -> void:
 	if score < target() and not ignore_targets:
 		phase = Phase.LOST
-		add_log("本季累计 %d，未达到目标 %d。" % [score, target()])
+		add_log("本季累计 %s，未达到目标 %s。" % [Pulse.big(score), Pulse.big(target())])
 		return
 	if is_calamity():
 		sap += Rules.CALAMITY_CLEAR_SAP
@@ -726,7 +760,7 @@ func _end_season() -> void:
 		shuffle(pool)
 		relic_options.assign(pool.slice(0, Rules.RELIC_CHOICES))
 		if relic_options.is_empty():
-			_open_market()
+			_after_relic()
 		return
 	sap += Rules.SEASON_CLEAR_SAP
 	phase = Phase.REWARD
@@ -744,7 +778,8 @@ func _end_season() -> void:
 func card_pool() -> Array[StringName]:
 	var out: Array[StringName] = []
 	for id in Cards.pool_ids():
-		if family_allowed(Cards.get_def(id)):
+		var d := Cards.get_def(id)
+		if family_allowed(d) and d.rarity <= max_rarity and not banned.has(id):
 			out.append(id)
 	return out
 
@@ -863,6 +898,9 @@ func choose_reward(i: int) -> void:
 	var t := reward_options[i]
 	discard.append(t)
 	add_log("获得%s" % Cards.get_def(t).display_name)
+	if legend_reward:
+		_after_legend()
+		return
 	_after_reward()
 
 
@@ -870,7 +908,16 @@ func skip_reward() -> void:
 	if phase != Phase.REWARD:
 		return
 	sap += Rules.SKIP_REWARD_SAP
+	if legend_reward:
+		_after_legend()
+		return
 	_after_reward()
+
+
+func _after_legend() -> void:
+	legend_reward = false
+	reward_options.clear()
+	_open_market()
 
 
 ## 选牌之后：一定概率遇到事件，否则直接去集市。
@@ -915,7 +962,7 @@ func choose_relic(i: int, replace: int = -1) -> bool:
 	var r := relic_options[i]
 	relics.append(r)
 	add_log("获得器物：%s" % Cards.relic(r).display_name)
-	_open_market()
+	_after_relic()
 	return true
 
 
@@ -923,7 +970,27 @@ func skip_relic() -> void:
 	if phase != Phase.RELIC:
 		return
 	sap += Rules.SKIP_REWARD_SAP
-	_open_market()
+	_after_relic()
+
+
+## 器物之后：传说三选一（卡池里有传说时），否则直接去集市。
+func _after_relic() -> void:
+	var pool := legend_pool() if legend_pick and (year < Rules.YEARS - 1 or Rules.LEGEND_EVERY_YEAR) else ([] as Array[StringName])
+	if pool.is_empty():
+		_open_market()
+		return
+	phase = Phase.REWARD
+	legend_reward = true
+	reward_options.assign(roll_cards(pool, Rules.LEGEND_CHOICES))
+
+
+## 本局可出现的传说牌。
+func legend_pool() -> Array[StringName]:
+	var out: Array[StringName] = []
+	for id in card_pool():
+		if Cards.get_def(id).rarity >= 2:
+			out.append(id)
+	return out
 
 
 func _collect_cards() -> void:
@@ -940,7 +1007,7 @@ func _collect_cards() -> void:
 func _next_season() -> void:
 	season += 1
 	_start_season()
-	add_log("%s开始，目标 %d" % [season_label(), target()])
+	add_log("%s开始，目标 %s" % [season_label(), Pulse.big(target())])
 	if is_calamity():
 		var cd := Cards.calamity(calamity)
 		add_log("天灾：%s——%s" % [cd.display_name, cd.desc])
@@ -954,6 +1021,7 @@ func _next_season() -> void:
 func _start_season() -> void:
 	turn = 1
 	score = 0
+	calamity_removed = 0
 	if has_relic(&"tongs"):
 		heat += 5
 	phase = Phase.PLAY
@@ -1183,7 +1251,7 @@ func leave_market() -> void:
 		shuffle(sp)
 		added.append_array(Land.scatter(tree, rng, {sp[0]: 1, sp[1]: 1}, old_r + 1))
 	_start_season()
-	add_log("第%d年春季开始，目标 %d；牌桌扩到半径 %d，新长出 %d 块地" % [year, target(), tree.radius, added.size()])
+	add_log("第%d年春季开始，目标 %s；牌桌扩到半径 %d，新长出 %d 块地" % [year, Pulse.big(target()), tree.radius, added.size()])
 	changed.emit()
 
 
@@ -1216,6 +1284,7 @@ func to_dict() -> Dictionary:
 		"hand_fresh": hand_fresh.duplicate(), "exhausted": _names(exhausted),
 		"plays": plays, "prunes": prunes, "transplants": transplants, "phase": phase,
 		"reward_options": _names(reward_options), "relic_options": _names(relic_options),
+		"legend_reward": legend_reward,
 		"relics": _names(relics), "calamity": String(calamity), "seen_calamities": _names(seen_calamities),
 		"market_cards": _names(market_cards), "market_relics": _names(market_relics),
 		"next_tip_bonus": next_tip_bonus,
@@ -1253,6 +1322,7 @@ static func from_dict(d: Dictionary) -> RunState:
 	s.transplants = int(d.get("transplants", Rules.TRANSPLANTS))
 	s.phase = int(d.phase) as Phase
 	s.reward_options = _ids(d.reward_options)
+	s.legend_reward = bool(d.get("legend_reward", false))
 	s.relic_options = _ids(d.relic_options)
 	s.relics = _ids(d.relics)
 	s.calamity = StringName(d.calamity)

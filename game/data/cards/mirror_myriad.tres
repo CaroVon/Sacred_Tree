@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="CardDef" format=3]
+
+[ext_resource type="Script" path="res://core/card_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"mirror_myriad"
+display_name = "万象镜"
+category = 3
+ports = PackedInt32Array()
+effect = 0
+value = 0.0
+color_key = &"mirror"
+price = 7
+rarity = 2
+family = Array[StringName]([&"mirror"])
+keywords = Array[StringName]([&"mirror"])
+desc = "末端（不流出）；万象：没有对称牌的每个末梢，都在对面映出一个幻影，额外计入它收获的 0.25 倍；每三个幻影算一对对称（镜阵、万花筒都认）"
+phantom_mirror = 0.25

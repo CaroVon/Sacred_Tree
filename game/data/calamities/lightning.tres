@@ -6,4 +6,4 @@
 script = ExtResource("1")
 id = &"lightning"
 display_name = "雷击"
-desc = "天灾季开始时，劈断最长的一条枝（3 张）"
+desc = "天灾季开始时，劈断最长那条枝的末端（最多 2 张，回到手牌）"

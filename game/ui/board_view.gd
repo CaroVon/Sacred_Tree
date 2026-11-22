@@ -429,7 +429,7 @@ func _draw() -> void:
 			if _anim_tips_done.has(n.key):
 				var dt: float = anim_t - _anim_tips_done[n.key]
 				var rise := minf(dt, 0.5) * 50.0 * k
-				_text_outlined(title, p + Vector2(0, -s + 2 * k - rise), "+%d" % pulse.contrib[n.key],
+				_text_outlined(title, p + Vector2(0, -s + 2 * k - rise), "+%s" % Pulse.big(pulse.contrib[n.key]),
 					int((18 + 6 * clampf(1.0 - dt * 3.0, 0.0, 1.0)) * k), Palette.TERRA)
 		elif flash.has(n.key) and not tracing:
 			_text_outlined(body, p + Vector2(0, -s + 6 * k), "+%d" % flash[n.key], int(16 * k), Palette.TERRA)
@@ -688,7 +688,7 @@ func _draw_node(n: TreeNode, p: Vector2, s: float, k: float, v: int, is_tip: boo
 		var ms := "".join(n.marks.map(func(m): return Rules.MARKS[m].short))
 		_text_outlined(title, p + Vector2(-s * 0.55, s * 0.62), ms, int(12 * k), Palette.GOLD)
 	if is_tip and pulse and pulse.contrib.has(n.key) and (anim_t < 0.0 or reached >= n.depth):
-		_text_outlined(body, p + Vector2(0, 18 * k), "收 %d" % pulse.contrib[n.key], int(11 * k), Palette.TERRA)
+		_text_outlined(body, p + Vector2(0, 18 * k), "收 %s" % Pulse.big(pulse.contrib[n.key]), int(11 * k), Palette.TERRA)
 	else:
 		_text_outlined(body, p + Vector2(0, 18 * k), str(v), int(11 * k), Palette.INK)
 
@@ -720,7 +720,7 @@ func _draw_trace(tree: TreeModel, pulse: Pulse.Result, s: float, k: float, trace
 		if label != "":
 			_pill(center_of(x) + Vector2(0, -s * 0.98), label, int(13 * k), Palette.OLIVE.darkened(0.2), Color(Palette.SHEET, 0.96))
 	if pulse and pulse.tips.has(trace_target) and trace_reached >= _trace_depth + 0.6:
-		_pill(center_of(trace_target) + Vector2(0, s * 1.02), "收获 %d" % pulse.contrib[trace_target], int(14 * k), Palette.TERRA.darkened(0.1), Color(Palette.SHEET, 0.96))
+		_pill(center_of(trace_target) + Vector2(0, s * 1.02), "收获 %s" % Pulse.big(pulse.contrib[trace_target]), int(14 * k), Palette.TERRA.darkened(0.1), Color(Palette.SHEET, 0.96))
 
 
 ## 预览牌：半透明的影子 + 类别色边。
@@ -757,9 +757,9 @@ func _step_label(res: Pulse.Result, x: Vector2i) -> String:
 		return ""
 	var tr: Array = res.trace[x]
 	if tree.at(x).is_seed():
-		return "输出 %d" % tr[-1].result
+		return "输出 %s" % Pulse.big(tr[-1].result)
 	var ops: Array[String] = []
 	for st in tr:
 		if st.op != "":
 			ops.append(String(st.op).replace("嫁接相乘 ", "").replace("嫁接相加 ", ""))
-	return "%s = %d" % [" ".join(ops), tr[-1].result]
+	return "%s = %s" % [" ".join(ops), Pulse.big(tr[-1].result)]

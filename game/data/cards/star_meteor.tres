@@ -15,5 +15,5 @@ price = 4
 rarity = 1
 family = Array[StringName]([&"star"])
 keywords = Array[StringName]([&"tip", &"timing"])
-desc = "+2，末端；每季最后一回合 ×6"
-last_turn_mult = 6
+desc = "+2，末端；每季最后一回合 ×5"
+last_turn_mult = 5
