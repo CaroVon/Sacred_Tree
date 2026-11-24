@@ -20,6 +20,7 @@ func _ready() -> void:
 	add_child(board)
 	board.set_state(run.tree, run.preview(), {}, false, {})
 	board.set_mood(run.season, run.calamity)
+	Game.scene_audio(&"map", run.season)
 	board.margins = Vector4(90, 150, PANEL_W + 90, 70)
 	var rb := RelicBar.new()
 	rb.position = Vector2(60, 24)

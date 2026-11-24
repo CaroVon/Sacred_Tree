@@ -34,6 +34,7 @@ func _ready() -> void:
 	board.ctx = _run.ctx()
 	add_child(board)
 	board.set_mood(_run.season if _run.season <= 4 else 1, &"")
+	Game.scene_audio(&"menu")
 	_shown = 0 if not Game.reduce_motion else _order.size()
 	_show_partial()
 	set_process(true)
@@ -105,16 +106,24 @@ func _ready() -> void:
 		Game.reduce_motion = not Game.reduce_motion
 		Game.save_settings()
 		upd_m.call())
-	var bv := _btn(opts, "", false)
-	bv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var upd_v := func(): bv.text = "音量：%d%%" % roundi(Game.volume * 100)
-	upd_v.call()
-	bv.pressed.connect(func():
-		var steps := [0.0, 0.25, 0.5, 0.75, 1.0]
-		Game.volume = steps[(steps.find(snappedf(Game.volume, 0.25)) + 1) % steps.size()]
-		Game.save_settings()
-		Game.sfx(&"click")
-		upd_v.call())
+	# 音量：音效 / 音乐 / 环境音，各自循环 0–100%
+	var vols := HBoxContainer.new()
+	vols.add_theme_constant_override("separation", 10)
+	v.add_child(vols)
+	for spec in [["音效", "volume"], ["音乐", "music_volume"], ["环境", "ambience_volume"]]:
+		var bv := _btn(vols, "", false)
+		bv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var prop: String = spec[1]
+		var label: String = spec[0]
+		var upd_v := func(): bv.text = "%s：%d%%" % [label, roundi(float(Game.get(prop)) * 100)]
+		upd_v.call()
+		bv.pressed.connect(func():
+			var steps := [0.0, 0.25, 0.5, 0.75, 1.0]
+			Game.set(prop, steps[(steps.find(snappedf(float(Game.get(prop)), 0.25)) + 1) % steps.size()])
+			Game.apply_volumes()
+			Game.save_settings()
+			Game.sfx(&"click")
+			upd_v.call())
 	var bq := _btn(v, "退出", false)
 	bq.pressed.connect(func(): get_tree().quit())
 	first.grab_focus.call_deferred()

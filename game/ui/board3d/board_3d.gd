@@ -12,12 +12,9 @@ extends BoardView
 
 const PITCH := 64.0           # 相机俯角（更俯：前后排拉开，前排压不住后排）
 const FOV := 30.0
-const WOOD_Y := 0.07          # 枝条离地高度
-const LABEL_Y := 0.7          # 标注挂在立牌的半高处
+const WOOD_Y := 0.02          # 枝条离地高度（地块厚 0.14，枝条从侧面长出、在缝隙里拱起）
+const LABEL_Y := 0.2          # 标注挂在地块顶面略上方
 const POP_DUR := 0.42         # 立牌翻立的时长
-const STANDEE_TILT := 0.72    # 立牌朝镜头倾斜的比例（相对俯角）；越大越「躺」，竖向遮挡越小
-## 悬停透视：挡在目标格前面的立牌淡到这个不透明度。
-const XRAY_ALPHA := 0.32
 ## 图解视图（立牌折倒、铺开旧版式的六边形牌片）。
 var diagram: bool = false
 var _fold: float = 0.0
@@ -26,8 +23,17 @@ var _fold: float = 0.0
 var animate_changes: bool = true
 
 var _bg: TextureRect
-var _svc: SubViewportContainer
+var _bg_old: TextureRect
+var _bg_id: StringName = &""
+var _parallax: Vector2 = Vector2.ZERO
+## 背景压暗一点，让牌桌和面板跳出来。
+const BG_DIM := Color(0.86, 0.84, 0.82)
+const BG_OVERSCAN := 1.05
+var _view: TextureRect
 var _vp: SubViewport
+## 3D 视口像素 / 画布单位（窗口比 1920×1080 大时 > 1，保证 3D 画面清晰）。
+var _px: float = 1.0
+var _fill: DirectionalLight3D
 var _world: Node3D
 var _env: Environment
 var _cam: Camera3D
@@ -40,7 +46,7 @@ var _piece_root: Node3D
 var _fx_root: Node3D
 var _motes: CPUParticles3D
 var _weather: Node3D
-var _ghost: Sprite3D
+var _ghost: MeshInstance3D
 var _ghost_type: StringName = &""
 var _heart: MeshInstance3D
 
@@ -67,6 +73,13 @@ var _season: int = 1
 var _calamity: StringName = &""
 var _base_energy: float = 0.7
 var _flash: float = 0.0              # 雷击闪光
+## 计分演出：末梢收获时是否在牌桌上画「+N」（季节界面改由飞向计数槽的数字表现，避免同一个数出现两次）。
+var tip_numbers := true
+## 计分演出的单项特效：格子闪光、镜头推近、全屏闪光。
+var _cell_flash: Array = []          # [cells, color, t, dur]
+var _cam_punch: float = 0.0
+var _sflash: float = 0.0
+var _sflash_col: Color = Color.WHITE
 var _next_bolt: float = 3.0
 
 
@@ -76,13 +89,22 @@ static var _mesh_cache: Dictionary = {}
 
 class Piece:
 	var node: Node3D
-	var sprite: Sprite3D
+	## 地块本体（树心是树墩，没有 mat）。
+	var body: Node3D
+	var mat: ShaderMaterial
 	var type: StringName
-	var height: float = 1.0
-	var pop_t: float = -1.0      # 翻立进度（<0 = 不在翻立）
+	var pop_t: float = -1.0      # 落下进度（<0 = 不在落下）
 	var bounce_t: float = -1.0   # 脉动末梢的弹跳
 	var leave_t: float = 0.0
-	var phase: float = 0.0       # 摇摆相位
+	var lift: float = 0.0        # 悬停抬起（平滑）
+	var tint: Color = Color.WHITE
+	var glow: float = 0.0
+
+
+## 地块：外接圆半径、厚度、倒角。格距 √3，留出缝隙让枝干露出来。
+const TILE_R := 0.82
+const TILE_H := 0.14
+const TILE_BEVEL := 0.035
 
 
 # ======================================================================
@@ -92,53 +114,93 @@ class Piece:
 func _ready() -> void:
 	super._ready()
 	show_labels = false
-	_bg = TextureRect.new()
+	# 背景：每季一幅神殿庭院（换季时交叉淡入），随鼠标轻微视差
+	for i in 2:
+		var b := TextureRect.new()
+		b.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		b.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		b.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		b.show_behind_parent = true
+		b.modulate = BG_DIM
+		add_child(b)
+		move_child(b, 0)
+		if i == 0:
+			_bg = b
+		else:
+			_bg_old = b
 	_bg.texture = CardArt.texture(&"board_bg")
-	_bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	_bg.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-	_bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_bg.show_behind_parent = true
-	add_child(_bg)
-	move_child(_bg, 0)
+	_bg_old.visible = false
 
-	_svc = SubViewportContainer.new()
-	_svc.stretch = false
-	_svc.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_svc.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_svc.show_behind_parent = true
-	add_child(_svc)
-	move_child(_svc, 1)
+	# 3D 视口按窗口的真实像素渲染（不再按 1920×1080 画布渲染后缩放），再由 TextureRect 画回画布
 	_vp = SubViewport.new()
 	_vp.transparent_bg = true
 	_vp.msaa_3d = Viewport.MSAA_2X
+	_vp.screen_space_aa = Viewport.SCREEN_SPACE_AA_FXAA
+	_vp.use_debanding = true
+	_vp.anisotropic_filtering_level = Viewport.ANISOTROPY_8X
 	_vp.own_world_3d = true
 	_vp.handle_input_locally = false
 	_vp.gui_disable_input = true
-	_svc.add_child(_vp)
+	_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	add_child(_vp)
+	_view = TextureRect.new()
+	_view.texture = _vp.get_texture()
+	_view.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_view.stretch_mode = TextureRect.STRETCH_SCALE
+	_view.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_view.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_view.show_behind_parent = true
+	_view.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	add_child(_view)
+	# 绘制顺序：背景 → 旧背景（淡出中）→ 3D 视口
+	move_child(_bg, 0)
+	move_child(_bg_old, 1)
+	move_child(_view, 2)
 
 	_world = Node3D.new()
 	_vp.add_child(_world)
 	_env = Environment.new()
 	_env.background_mode = Environment.BG_CLEAR_COLOR
 	_env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	_env.ambient_light_color = Color("#ECE8E0")
-	_env.ambient_light_energy = 0.5
-	_env.tonemap_mode = Environment.TONE_MAPPER_LINEAR
+	_env.ambient_light_color = Color("#D9D2C4")
+	_env.ambient_light_energy = 0.28
+	_env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	_env.tonemap_exposure = 1.05
+	_env.tonemap_white = 6.0
+	# 只让真正的高光（脉动金光、传说金框）溢出一点光晕
+	_env.glow_enabled = true
+	_env.glow_intensity = 0.55
+	_env.glow_strength = 0.9
+	_env.glow_bloom = 0.0
+	_env.glow_hdr_threshold = 1.1
+	_env.glow_blend_mode = Environment.GLOW_BLEND_MODE_SOFTLIGHT
+	_env.adjustment_enabled = true
+	_env.adjustment_contrast = 1.06
+	_env.adjustment_saturation = 1.05
 	var we := WorldEnvironment.new()
 	we.environment = _env
 	_world.add_child(we)
 	_light = DirectionalLight3D.new()
 	_light.rotation_degrees = Vector3(-52, -38, 0)
 	_light.light_color = Color("#FFF7EA")
-	_light.light_energy = 0.7
-	# 虚拟台面不接收实时阴影：用柔和的接触阴影块代替（也省性能）
-	_light.shadow_enabled = false
-	_light.shadow_bias = 0.03
-	_light.shadow_opacity = 0.75
-	_light.directional_shadow_max_distance = 60.0
+	_light.light_energy = 0.9
+	# 真实的柔和阴影：地块、枝干、树墩都投影到石台上
+	_light.shadow_enabled = true
+	_light.shadow_bias = 0.02
+	_light.shadow_normal_bias = 1.0
+	_light.shadow_opacity = 0.7
+	_light.shadow_blur = 1.6
+	_light.light_angular_distance = 0.0
+	_light.directional_shadow_max_distance = 40.0
 	_light.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL
 	_world.add_child(_light)
+	# 补光：从镜头一侧打来的冷色弱光，让背光面不发死
+	_fill = DirectionalLight3D.new()
+	_fill.rotation_degrees = Vector3(-30, 150, 0)
+	_fill.light_color = Color("#C9D6E8")
+	_fill.light_energy = 0.25
+	_fill.shadow_enabled = false
+	_world.add_child(_fill)
 	_cam = Camera3D.new()
 	_cam.fov = FOV
 	_cam.current = true
@@ -153,7 +215,6 @@ func _ready() -> void:
 	_world.add_child(_piece_root)
 	_fx_root = Node3D.new()
 	_world.add_child(_fx_root)
-	_build_motes()
 	set_mood(1, &"")
 	_layout()
 
@@ -197,7 +258,7 @@ func _build_motes() -> void:
 	if Game.reduce_motion:
 		return
 	_motes = CPUParticles3D.new()
-	_motes.amount = 46
+	_motes.amount = 16
 	_motes.lifetime = 9.0
 	_motes.preprocess = 9.0
 	_motes.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
@@ -235,14 +296,15 @@ func set_mood(season: int, calamity: StringName) -> void:
 	_calamity = calamity if Rules.is_calamity(season) else &""
 	if _light == null:
 		return
-	# [光色, 光强, 俯角, 方位, 环境光色, 环境光强, 台面色调]
+	# [主光色, 主光强, 俯角, 方位, 环境光色, 环境光强, 台面色调, 补光色, 补光强, 曝光]
+	# 春晨清亮、夏午高光、秋暮斜阳、冬月冷光、天灾季昏沉
 	var m: Array
 	match season:
-		1: m = [Color("#F4FBEF"), 0.70, -50.0, -40.0, Color("#E6EEE4"), 0.50, Color(0.96, 1.0, 0.95)]
-		2: m = [Color("#FFF1D6"), 0.78, -64.0, -20.0, Color("#F1E8D6"), 0.50, Color(1.03, 1.0, 0.92)]
-		3: m = [Color("#FFD9A8"), 0.70, -36.0, -62.0, Color("#EBD9C4"), 0.46, Color(1.04, 0.95, 0.86)]
-		4: m = [Color("#DCE6F2"), 0.58, -44.0, -120.0, Color("#D8DDE4"), 0.52, Color(0.92, 0.95, 1.0)]
-		_: m = [Color("#F2D2B6"), 0.62, -46.0, -30.0, Color("#D9CCC4"), 0.42, Color(0.98, 0.92, 0.88)]
+		1: m = [Color("#FFF6E6"), 0.92, -48.0, -40.0, Color("#DCE6DA"), 0.30, Color(0.96, 1.02, 0.95), Color("#CFE0F0"), 0.28, 1.05]
+		2: m = [Color("#FFF0D2"), 1.0, -66.0, -20.0, Color("#EDE2CC"), 0.30, Color(1.04, 1.0, 0.92), Color("#D6E2EE"), 0.22, 1.08]
+		3: m = [Color("#FFC98E"), 0.95, -30.0, -62.0, Color("#E6CDB2"), 0.26, Color(1.06, 0.95, 0.84), Color("#B8C8E0"), 0.30, 1.02]
+		4: m = [Color("#D2E0F4"), 0.80, -40.0, -120.0, Color("#C8D2E0"), 0.34, Color(0.90, 0.95, 1.04), Color("#9FB4D8"), 0.30, 1.0]
+		_: m = [Color("#F0C2A0"), 0.78, -42.0, -30.0, Color("#C9B8B0"), 0.24, Color(0.96, 0.88, 0.84), Color("#A090B0"), 0.25, 0.95]
 	var tint: Color = m[6]
 	_light.light_color = m[0]
 	_base_energy = m[1]
@@ -250,71 +312,145 @@ func set_mood(season: int, calamity: StringName) -> void:
 	_light.rotation_degrees = Vector3(m[2], m[3], 0)
 	_env.ambient_light_color = m[4]
 	_env.ambient_light_energy = m[5]
-	if _calamity == &"drought":
-		_light.light_color = Color("#FFC98A")
-		tint = Color(1.08, 0.94, 0.78)
+	_fill.light_color = m[7]
+	_fill.light_energy = m[8]
+	_env.tonemap_exposure = m[9]
+	match _calamity:
+		&"drought":
+			_light.light_color = Color("#FFB870")
+			tint = Color(1.10, 0.92, 0.74)
+		&"eclipse":
+			_base_energy *= 0.45
+			_light.light_energy = _base_energy
+			_env.ambient_light_color = Color("#8C86A8")
+			tint = Color(0.82, 0.82, 0.92)
+		&"wildfire":
+			_light.light_color = Color("#FF9A60")
+			tint = Color(1.06, 0.86, 0.78)
+		&"flood":
+			_light.light_color = Color("#C8D8E8")
+			tint = Color(0.88, 0.94, 1.02)
+	_set_backdrop(StringName("bg_calamity") if season >= 5 else StringName("bg_" + ["spring", "summer", "autumn", "winter"][clampi(season, 1, 4) - 1]))
 	_ground_mat.set_shader_parameter("season_tint", tint)
 	for lm in _land_mats:
 		lm.set_shader_parameter("season_tint", tint)
 	_build_weather()
 
 
+## 换背景：旧图留在上层淡出。
+func _set_backdrop(id: StringName) -> void:
+	if id == _bg_id or not CardArt.has(id):
+		return
+	var first := _bg_id == &""
+	_bg_id = id
+	_bg_old.texture = _bg.texture
+	_bg.texture = CardArt.texture(id)
+	if first or Game.reduce_motion:
+		_bg_old.visible = false
+		return
+	_bg_old.visible = true
+	_bg_old.modulate = BG_DIM
+	var tw := _bg_old.create_tween()
+	tw.tween_property(_bg_old, "modulate:a", 0.0, 1.2)
+	tw.tween_callback(func(): _bg_old.visible = false)
+
+
 func _build_weather() -> void:
 	if _weather:
 		_weather.queue_free()
 		_weather = null
-	if Game.reduce_motion or _calamity == &"":
+	if Game.reduce_motion:
 		return
 	_weather = Node3D.new()
 	_world.add_child(_weather)
-	var p := CPUParticles3D.new()
-	p.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
-	p.mesh = _dot_quad(0.08)
+	# 季节粒子（天灾季叠在天灾天气下面，用较淡的一层）
+	var calm := 0.5 if _calamity != &"" else 1.0
+	match clampi(_season, 1, 5):
+		1:  # 春：粉白花瓣缓缓飘落 + 花粉
+			_particles(int(26 * calm), 9.0, Vector3(10, 0.5, 8), Vector3(0, 4.0, -1), Vector3(0.4, -1, 0.1), 25.0,
+				Vector3(0.05, -0.12, 0), 0.15, 0.4, 0.6, 1.1, Color("#F4C9CF"), 0.85, Vector2(0.14, 0.09))
+			_particles(int(18 * calm), 7.0, Vector3(9, 1.5, 7), Vector3(0, 1.4, 0), Vector3(0, 1, 0), 180.0,
+				Vector3.ZERO, 0.03, 0.1, 0.4, 0.8, Color("#FFF2B8"), 0.7, Vector2(0.05, 0.05))
+		2:  # 夏：萤火虫在台面上方游荡（发光，触发辉光）
+			_particles(int(22 * calm), 6.0, Vector3(9, 0.9, 7), Vector3(0, 1.0, 0), Vector3(0, 1, 0), 180.0,
+				Vector3.ZERO, 0.08, 0.25, 0.6, 1.0, Color(2.4, 2.0, 0.8), 1.0, Vector2(0.07, 0.07))
+		3:  # 秋：橙红落叶打着旋
+			_particles(int(22 * calm), 8.0, Vector3(10, 0.5, 8), Vector3(0, 4.0, -1), Vector3(0.6, -1, 0), 30.0,
+				Vector3(0.1, -0.25, 0), 0.2, 0.5, 0.8, 1.4, Color("#D9783A"), 0.95, Vector2(0.16, 0.10))
+		4:  # 冬：细雪
+			_particles(int(70 * calm), 7.0, Vector3(11, 0.5, 9), Vector3(0, 4.5, -1), Vector3(0.1, -1, 0), 10.0,
+				Vector3(0, -0.3, 0), 0.25, 0.5, 0.4, 1.0, Color("#F4F7FF"), 0.9, Vector2(0.06, 0.06))
+	if _calamity == &"":
+		return
 	match _calamity:
 		&"pests":
 			# 虫害：成团乱飞的小黑虫
-			p.amount = 60
-			p.lifetime = 3.0
-			p.preprocess = 3.0
-			p.emission_box_extents = Vector3(7, 0.8, 6)
-			p.position = Vector3(0, 0.9, 0)
-			p.spread = 180.0
-			p.gravity = Vector3.ZERO
-			p.initial_velocity_min = 0.6
-			p.initial_velocity_max = 1.4
-			p.scale_amount_min = 0.5
-			p.scale_amount_max = 0.9
-			p.color_ramp = _fade_ramp(Color(0.16, 0.14, 0.12), 0.9)
+			_particles(60, 3.0, Vector3(7, 0.8, 6), Vector3(0, 0.9, 0), Vector3(0, 1, 0), 180.0,
+				Vector3.ZERO, 0.6, 1.4, 0.5, 0.9, Color(0.16, 0.14, 0.12), 0.9, Vector2(0.08, 0.08))
 		&"drought":
 			# 干旱：缓缓上升的热浪尘
-			p.amount = 40
-			p.lifetime = 4.0
-			p.preprocess = 4.0
-			p.emission_box_extents = Vector3(9, 0.1, 8)
-			p.position = Vector3(0, 0.1, 0)
-			p.direction = Vector3(0, 1, 0)
-			p.spread = 15.0
-			p.gravity = Vector3(0, 0.15, 0)
-			p.initial_velocity_min = 0.2
-			p.initial_velocity_max = 0.5
-			p.scale_amount_min = 1.0
-			p.scale_amount_max = 2.2
-			p.color_ramp = _fade_ramp(Color(1.0, 0.78, 0.45), 0.35)
-		_:
-			# 雷击：低空飘过的阴云尘 + 间歇闪光（在 _process 里）
-			p.amount = 24
-			p.lifetime = 5.0
-			p.preprocess = 5.0
-			p.emission_box_extents = Vector3(9, 0.5, 8)
-			p.position = Vector3(0, 2.2, 0)
-			p.direction = Vector3(1, 0, 0)
-			p.spread = 10.0
-			p.gravity = Vector3.ZERO
-			p.initial_velocity_min = 0.5
-			p.initial_velocity_max = 1.0
-			p.scale_amount_min = 2.0
-			p.scale_amount_max = 4.0
-			p.color_ramp = _fade_ramp(Color(0.35, 0.38, 0.45), 0.18)
+			_particles(40, 4.0, Vector3(9, 0.1, 8), Vector3(0, 0.1, 0), Vector3(0, 1, 0), 15.0,
+				Vector3(0, 0.15, 0), 0.2, 0.5, 1.0, 2.2, Color(1.0, 0.78, 0.45), 0.35, Vector2(0.08, 0.08))
+		&"wildfire":
+			# 山火：发光的余烬向上飘 + 低处的烟
+			_particles(55, 3.5, Vector3(9, 0.2, 7), Vector3(0, 0.2, 0), Vector3(0.2, 1, 0), 25.0,
+				Vector3(0.1, 0.4, 0), 0.4, 1.0, 0.5, 1.0, Color(3.0, 1.2, 0.3), 1.0, Vector2(0.06, 0.06))
+			_particles(16, 6.0, Vector3(9, 0.3, 7), Vector3(0, 1.5, 0), Vector3(0.3, 1, 0), 20.0,
+				Vector3(0.1, 0.08, 0), 0.2, 0.4, 3.0, 5.0, Color(0.25, 0.2, 0.18), 0.22, Vector2(0.1, 0.1))
+		&"flood", &"lightning":
+			# 洪水 / 雷击：斜落的雨丝；雷击另有间歇闪光（在 _process 里）
+			_particles(160 if _calamity == &"flood" else 110, 0.9, Vector3(11, 0.5, 9), Vector3(0, 5.0, -1), Vector3(0.15, -1, 0), 3.0,
+				Vector3(0, -9.0, 0), 6.0, 8.0, 1.0, 1.0, Color(0.75, 0.82, 0.95), 0.45, Vector2(0.015, 0.4))
+			if _calamity == &"lightning":
+				_particles(20, 5.0, Vector3(9, 0.5, 8), Vector3(0, 2.4, 0), Vector3(1, 0, 0), 10.0,
+					Vector3.ZERO, 0.5, 1.0, 2.0, 4.0, Color(0.35, 0.38, 0.45), 0.18, Vector2(0.1, 0.1))
+		&"gale":
+			# 大风：横扫的风线 + 被卷走的叶子
+			_particles(60, 1.2, Vector3(1, 1.2, 8), Vector3(-10, 1.0, 0), Vector3(1, 0, 0), 4.0,
+				Vector3.ZERO, 12.0, 16.0, 1.0, 1.0, Color(0.95, 0.95, 0.9), 0.25, Vector2(0.6, 0.012))
+			_particles(26, 2.0, Vector3(1, 1.0, 8), Vector3(-10, 1.0, 0), Vector3(1, 0.1, 0), 15.0,
+				Vector3.ZERO, 7.0, 10.0, 0.8, 1.3, Color("#8A9A50"), 0.9, Vector2(0.14, 0.09))
+		&"eclipse":
+			# 日蚀：稀疏飘浮的暗紫尘
+			_particles(30, 8.0, Vector3(9, 1.5, 8), Vector3(0, 1.5, 0), Vector3(0, 1, 0), 180.0,
+				Vector3.ZERO, 0.05, 0.15, 1.0, 2.0, Color(0.45, 0.4, 0.7), 0.4, Vector2(0.1, 0.1))
+
+
+## 一层天气粒子。col 的分量可以 > 1（发光，触发辉光）。quad：粒子的宽高（世界单位）。
+func _particles(amount: int, life: float, box: Vector3, pos: Vector3, dir: Vector3, spread: float, grav: Vector3,
+		vmin: float, vmax: float, smin: float, smax: float, col: Color, alpha: float, quad: Vector2) -> void:
+	if amount <= 0:
+		return
+	var p := CPUParticles3D.new()
+	p.amount = amount
+	p.lifetime = life
+	p.preprocess = life
+	p.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+	p.emission_box_extents = box
+	p.position = pos
+	p.direction = dir
+	p.spread = spread
+	p.gravity = grav
+	p.initial_velocity_min = vmin
+	p.initial_velocity_max = vmax
+	p.scale_amount_min = smin
+	p.scale_amount_max = smax
+	# 花瓣、叶子（略扁的粒子）打旋；雨丝、风线（细长）保持方向
+	var leafy := quad.x != quad.y and maxf(quad.x, quad.y) < minf(quad.x, quad.y) * 3.0
+	p.angle_max = 360.0 if leafy else 0.0
+	p.angular_velocity_min = -90.0 if leafy else 0.0
+	p.angular_velocity_max = 90.0 if leafy else 0.0
+	var q := QuadMesh.new()
+	q.size = quad
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	m.vertex_color_use_as_albedo = true
+	m.albedo_texture = _dot_texture()
+	q.material = m
+	p.mesh = q
+	p.color_ramp = _fade_ramp(col, alpha)
 	_weather.add_child(p)
 
 
@@ -430,16 +566,7 @@ static func placeholder_standee(id: StringName) -> Texture2D:
 
 ## 立牌高度（世界单位）：末端与相邻牌（果、花）最显眼，传导与修剪牌矮一些。
 static func standee_height(n: TreeNode) -> float:
-	if n.is_seed():
-		return 2.4
-	match n.def().category:
-		CardDef.Category.END: return 2.2
-		CardDef.Category.AURA: return 2.2
-		CardDef.Category.GRAFT: return 2.05
-		CardDef.Category.BRANCH: return 1.95
-		CardDef.Category.TIME: return 1.95
-		CardDef.Category.PRUNE: return 1.7
-	return 1.7
+	return 0.5 if n.is_seed() else TILE_H + 0.04
 
 
 # ======================================================================
@@ -449,12 +576,15 @@ static func standee_height(n: TreeNode) -> float:
 func _layout() -> void:
 	if _cam == null:
 		return
-	_vp.size = Vector2i(maxi(2, int(size.x)), maxi(2, int(size.y)))
+	_px = clampf(get_viewport().get_final_transform().get_scale().x, 0.5, 2.0) if is_inside_tree() else 1.0
+	_vp.size = Vector2i(maxi(2, int(size.x * _px)), maxi(2, int(size.y * _px)))
 	_fit_radius = board_radius()
 	_ground_mat.set_shader_parameter("radius", float(_fit_radius))
 	_fit_camera()
 	_clamp_pan()
 	_apply_view()
+	if tree != null and size.x > 20.0:
+		_auto_frame(tree, true)
 
 
 func _place_cam(d: float, ho: float, vo: float, at: Vector3 = Vector3.ZERO) -> void:
@@ -475,8 +605,8 @@ func _apply_view() -> void:
 
 ## 屏幕点落在台面上的位置。
 func _ground_at(p: Vector2) -> Vector3:
-	var o := _cam.project_ray_origin(p)
-	var d := _cam.project_ray_normal(p)
+	var o := _cam.project_ray_origin(p * _px)
+	var d := _cam.project_ray_normal(p * _px)
 	if absf(d.y) < 0.0001:
 		return Vector3.ZERO
 	return o + d * (-o.y / d.y)
@@ -515,7 +645,8 @@ func reset_view() -> void:
 
 
 func _clamp_pan() -> void:
-	var lim := (board_radius() + 1.0) * Hex.SQRT3 * (1.0 - 1.0 / zoom)
+	# 放大后允许平移到牌桌边缘（再多留一格，给不对称的边距——例如集市右侧的大面板——留余地）
+	var lim := (board_radius() + 2.0) * Hex.SQRT3 * (1.0 - 1.0 / zoom)
 	if pan.length() > lim:
 		pan = pan.normalized() * lim if lim > 0.0 else Vector2.ZERO
 
@@ -609,7 +740,7 @@ func _grid_bbox() -> Rect2:
 	for c in Hex.all_cells(board_radius()):
 		if Hex.distance(c, Vector2i.ZERO) < board_radius():
 			continue
-		for y: float in [0.0, 2.2]:
+		for y: float in [0.0, 0.5]:
 			for p in _proj_hex(c, 1.0, y):
 				if first:
 					bb = Rect2(p, Vector2.ZERO)
@@ -627,7 +758,7 @@ func _wpos(c: Vector2i, y: float = 0.0) -> Vector3:
 func _proj(w: Vector3) -> Vector2:
 	if _cam == null or not _cam.is_inside_tree():
 		return Vector2.ZERO
-	return _cam.unproject_position(w)
+	return _cam.unproject_position(w) / _px
 
 
 ## 某格某高度的六个角投影到屏幕上（透视下的六边形）。
@@ -652,8 +783,8 @@ func center_of(c: Vector2i) -> Vector2:
 func cell_at(p: Vector2) -> Vector2i:
 	if _cam == null:
 		return NO_CELL
-	var o := _cam.project_ray_origin(p)
-	var d := _cam.project_ray_normal(p)
+	var o := _cam.project_ray_origin(p * _px)
+	var d := _cam.project_ray_normal(p * _px)
 	if absf(d.y) < 0.0001:
 		return NO_CELL
 	var t := (0.15 - o.y) / d.y
@@ -684,7 +815,7 @@ func set_state(t: TreeModel, p: Pulse.Result, tg: Dictionary, prune: bool, fl: D
 var _user_view := false
 
 
-func _auto_frame(t: TreeModel) -> void:
+func _auto_frame(t: TreeModel, force: bool = false) -> void:
 	if _user_view or t == null or _cam == null or not auto_frame:
 		return
 	var lo := Vector2(INF, INF)
@@ -696,18 +827,29 @@ func _auto_frame(t: TreeModel) -> void:
 		hi = Vector2(maxf(hi.x, w.x), maxf(hi.y, w.z))
 		far = maxi(far, Hex.distance(k, Vector2i.ZERO))
 	var extent := float(far) + 2.0
-	var z := clampf((board_radius() + 1.0) / extent, 1.0, AUTO_ZOOM_MAX)
+	var z := clampf((board_radius() + 1.0) / (extent - 0.4), 1.0, AUTO_ZOOM_MAX)
 	var c := (lo + hi) * 0.5 if z > 1.001 else Vector2.ZERO
-	if absf(z - zoom) < 0.04 and c.distance_to(pan) < 0.3:
+	if not force and absf(z - zoom) < 0.04 and c.distance_to(pan) < 0.3:
 		return
 	zoom = z
 	pan = c
 	_clamp_pan()
 	_apply_view()
+	# 再按屏幕微调：让树的中心正好落在可用区域（margins 之内）的中央
+	if z > 1.001:
+		var want := Vector2(margins.x + (size.x - margins.x - margins.z) * 0.5, margins.y + (size.y - margins.y - margins.w) * 0.5)
+		var mid3 := Vector3((lo.x + hi.x) * 0.5, 0.0, (lo.y + hi.y) * 0.5)
+		for i in 3:
+			var got := _proj(mid3)
+			var g0 := _ground_at(want)
+			var g1 := _ground_at(got)
+			pan += Vector2(g1.x - g0.x, g1.z - g0.z)
+			_clamp_pan()
+			_apply_view()
 
 
 ## 自动取景的最大放大倍数；设为 false 可关掉（集市等场景）。
-const AUTO_ZOOM_MAX := 1.6
+const AUTO_ZOOM_MAX := 1.5
 var auto_frame := true
 
 
@@ -777,12 +919,12 @@ func _sync_land(t: TreeModel) -> void:
 		m.set_shader_parameter("tint", tint)
 		m.set_shader_parameter("tint_amount", 0.0 if tint == Color.WHITE else 0.75)
 		m.set_shader_parameter("ripple", 1.0 if lt == Land.Type.SPRING and not Game.reduce_motion else 0.0)
-		m.set_shader_parameter("opacity", 0.8 if lt != Land.Type.ROCK else 0.7)
+		m.set_shader_parameter("opacity", 0.92)
 		m.render_priority = -20
 		_land_mats.append(m)
 		var mi := MeshInstance3D.new()
 		var pm := PlaneMesh.new()
-		pm.size = Vector2(2.3, 2.3)
+		pm.size = Vector2(1.70, 1.70)
 		mi.mesh = pm
 		mi.material_override = m
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -796,12 +938,27 @@ func _sync_land(t: TreeModel) -> void:
 				var rr := 0.16 + 0.07 * float(posmod(c.x * 3 + c.y * 5 + i * 7, 4))
 				sm.radius = rr
 				sm.height = rr * 1.2
-				sm.radial_segments = 7
-				sm.rings = 3
+				sm.radial_segments = 14
+				sm.rings = 7
 				rk.mesh = sm
-				rk.material_override = _flat(&"rock", Palette.STONE.lightened(0.15))
+				rk.material_override = _mat(&"rock3d", func():
+					var rmat := StandardMaterial3D.new()
+					rmat.albedo_color = Palette.STONE.darkened(0.15)
+					rmat.roughness = 0.95
+					var nt := NoiseTexture2D.new()
+					var fn := FastNoiseLite.new()
+					fn.frequency = 0.08
+					nt.noise = fn
+					nt.seamless = true
+					nt.as_normal_map = true
+					nt.bump_strength = 4.0
+					rmat.normal_enabled = true
+					rmat.normal_texture = nt
+					return rmat)
 				var a := TAU * (i / 3.0) + c.x
-				rk.position = _wpos(c, rr * 0.35) + Vector3(cos(a), 0, sin(a)) * 0.38
+				rk.position = _wpos(c, rr * 0.2) + Vector3(cos(a), 0, sin(a)) * 0.36
+				rk.scale = Vector3(1.15, 0.6, 0.9)
+				rk.rotation.y = a
 				_land_root.add_child(rk)
 	set_mood(_season, _calamity)
 
@@ -814,7 +971,7 @@ func _sync_pieces(t: TreeModel) -> void:
 			if animate_changes and not Game.reduce_motion:
 				pc.leave_t = 0.0
 				_leaving.append(pc)
-				_burst(pc.node.position + Vector3(0, 0.4, 0), Color(Palette.OLIVE, 0.9), 12, 1.4)
+				_burst(pc.node.position + Vector3(0, 0.3, 0), Color(Palette.OLIVE, 0.9), 14, 1.6)
 			else:
 				pc.node.queue_free()
 	for n: TreeNode in t.nodes.values():
@@ -826,7 +983,6 @@ func _sync_pieces(t: TreeModel) -> void:
 		if _drop_pending.has(n.key):
 			_drop_pending.erase(n.key)
 			pc.pop_t = 0.0
-			pc.sprite.rotation.x = -PI * 0.5
 		_pieces[n.key] = pc
 	_drop_pending.clear()
 
@@ -834,30 +990,143 @@ func _sync_pieces(t: TreeModel) -> void:
 func _make_piece(n: TreeNode) -> Piece:
 	var pc := Piece.new()
 	pc.type = n.type
-	pc.height = standee_height(n)
-	pc.phase = float(n.key.x * 31 + n.key.y * 17) * 0.37
 	pc.node = Node3D.new()
-	pc.node.add_child(_blob(1.0 + pc.height * 0.25, 0.42))
-	var sp := _standee_sprite(n.type if not n.is_seed() else &"seed", pc.height)
-	pc.node.add_child(sp)
-	pc.sprite = sp
+	if n.is_seed():
+		pc.body = _stump()
+	else:
+		var mi := make_tile(n.type)
+		pc.mat = mi.get_surface_override_material(0)
+		pc.body = mi
+	pc.node.add_child(pc.body)
 	return pc
 
 
-func _standee_sprite(id: StringName, h: float) -> Sprite3D:
-	var tex := standee_texture(id)
-	var sp := Sprite3D.new()
-	sp.texture = tex
-	sp.shaded = true
-	sp.double_sided = true
-	sp.alpha_cut = SpriteBase3D.ALPHA_CUT_DISABLED
-	sp.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	sp.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+## 一张牌的地块：厚纸板六棱柱，顶面印插画，侧面是流派色的纸边。
+static func make_tile(id: StringName) -> MeshInstance3D:
+	var def := Cards.get_def(id)
+	var mi := MeshInstance3D.new()
+	mi.mesh = _cached_mesh(&"tile", func(): return HexMesh.prism(TILE_R, 0.0, TILE_H, Rect2(0, 0, 1, 1), HexMesh.POINTY, 0.0, TILE_BEVEL))
+	var m := ShaderMaterial.new()
+	m.shader = load("res://ui/board3d/tile.gdshader")
+	# 顶面平印牌面插画的主体部分（与图解视图同样的取景：上部偏中的方形）
+	var tex: Texture2D = CardArt.texture(def.art_id()) if def else null
+	m.set_shader_parameter("art", tex)
+	m.set_shader_parameter("has_art", tex != null)
 	if tex:
-		sp.pixel_size = h / maxf(1.0, tex.get_size().y)
-		sp.offset = Vector2(0, tex.get_size().y * 0.5)
-	sp.rotation.x = -deg_to_rad(PITCH) * STANDEE_TILT
-	return sp
+		var ts := tex.get_size()
+		var side: float = ts.x * 0.96
+		m.set_shader_parameter("uv_rect", Vector4((ts.x - side) * 0.5 / ts.x, ts.y * 0.2 / ts.y, side / ts.x, side / ts.y))
+	var col := Palette.OLIVE
+	var rar := 0
+	if def:
+		col = Palette.family_color(def.families()[0]) if not def.family.is_empty() else Palette.card_color(def.color_key)
+		rar = clampi(def.rarity, 0, 2)
+	m.set_shader_parameter("paper", Palette.SHEET.darkened(0.16).lerp(col, 0.3))
+	m.set_shader_parameter("frame", col.darkened(0.35))
+	m.set_shader_parameter("rarity", rar)
+	mi.set_surface_override_material(0, m)
+	mi.set_surface_override_material(1, _flat(StringName("tile_side_%s" % col.to_html()), col.darkened(0.25)))
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	return mi
+
+
+## 树心：一截带年轮的树墩，根须向四周伸进石台。
+func _stump() -> Node3D:
+	var root := Node3D.new()
+	var bark := _bark_mat()
+	var trunk := MeshInstance3D.new()
+	var cm := CylinderMesh.new()
+	cm.top_radius = 0.5
+	cm.bottom_radius = 0.62
+	cm.height = 0.5
+	cm.radial_segments = 28
+	cm.rings = 2
+	trunk.mesh = cm
+	trunk.position.y = 0.25
+	trunk.material_override = bark
+	root.add_child(trunk)
+	var top := MeshInstance3D.new()
+	var tm := CylinderMesh.new()
+	tm.top_radius = 0.47
+	tm.bottom_radius = 0.47
+	tm.height = 0.02
+	tm.radial_segments = 28
+	top.mesh = tm
+	top.position.y = 0.505
+	top.material_override = _mat(&"rings", func():
+		var m := ShaderMaterial.new()
+		var sh := Shader.new()
+		sh.code = """shader_type spatial;
+uniform vec4 wood : source_color = vec4(0.80, 0.64, 0.44, 1.0);
+uniform vec4 ring : source_color = vec4(0.52, 0.36, 0.22, 1.0);
+void fragment() {
+	vec2 p = (UV - 0.5) * 2.0;
+	float d = length(p) + 0.03 * sin(atan(p.y, p.x) * 5.0);
+	float r = smoothstep(0.35, 0.5, abs(fract(d * 7.0) - 0.5));
+	vec3 c = mix(ring.rgb, wood.rgb, r);
+	c = mix(c, ring.rgb * 0.7, smoothstep(0.9, 1.0, length(p)));
+	ALBEDO = c;
+	ROUGHNESS = 0.8;
+}"""
+		m.shader = sh
+		return m)
+	root.add_child(top)
+	# 树根张开的裙边：下宽上窄的一圈，像树干扎进石台
+	var skirt := MeshInstance3D.new()
+	var sk := CylinderMesh.new()
+	sk.top_radius = 0.55
+	sk.bottom_radius = 0.8
+	sk.height = 0.12
+	sk.radial_segments = 28
+	skirt.mesh = sk
+	skirt.position.y = 0.06
+	skirt.material_override = bark
+	root.add_child(skirt)
+	# 神树之心：树墩上方一颗发光的种子
+	var orb := MeshInstance3D.new()
+	var sm := SphereMesh.new()
+	sm.radius = 0.16
+	sm.height = 0.32
+	sm.radial_segments = 24
+	sm.rings = 12
+	orb.mesh = sm
+	orb.position.y = 0.72
+	orb.name = "Orb"
+	orb.material_override = _mat(&"heart_orb", func():
+		var m := StandardMaterial3D.new()
+		m.albedo_color = Color("#F6D27A")
+		m.emission_enabled = true
+		m.emission = Color("#FFC860")
+		m.emission_energy_multiplier = 1.6
+		m.roughness = 0.3
+		return m)
+	root.add_child(orb)
+	for mi in root.find_children("*", "MeshInstance3D", true, false):
+		(mi as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	return root
+
+
+static func _bark_mat() -> Material:
+	return _mat(&"bark3d", func():
+		var m := StandardMaterial3D.new()
+		m.albedo_color = Color("#7A5C40")
+		m.roughness = 0.88
+		var nt := NoiseTexture2D.new()
+		var fn := FastNoiseLite.new()
+		fn.frequency = 0.04
+		fn.fractal_octaves = 3
+		nt.noise = fn
+		nt.width = 128
+		nt.height = 256
+		nt.seamless = true
+		nt.as_normal_map = true
+		nt.bump_strength = 6.0
+		m.normal_enabled = true
+		m.normal_texture = nt
+		m.normal_scale = 0.8
+		m.uv1_scale = Vector3(2.0, 1.0, 1.0)
+		m.cull_mode = BaseMaterial3D.CULL_DISABLED
+		return m)
 
 
 ## 切换图解视图：立牌像立体书合上一样折倒，台面上铺开旧版式的六边形牌片。
@@ -872,71 +1141,62 @@ func set_diagram(on: bool) -> void:
 
 ## 立牌顶端的世界坐标（考虑后仰角）。
 func _standee_top(k: Vector2i, h: float) -> Vector3:
-	var tilt := -deg_to_rad(PITCH) * STANDEE_TILT
-	return _wpos(k, 0.0) + Vector3(0, h * cos(tilt), h * sin(tilt))
+	return _wpos(k, h)
 
 
-## 木质枝条：从父格到子格的锥形圆木，粗细随深度递减；嫁接边是金绿色的藤。
+## 木质枝条：从父格到子格的平滑拱形树枝（从地块侧面长出、在缝隙里露出），粗细随深度递减；
+## 嫁接边是带金光的细藤。脉动时一层金光从父端往子端生长。
 func _sync_wood(t: TreeModel) -> void:
 	for ch in _wood_root.get_children():
 		ch.queue_free()
 	_glows.clear()
-	var bark := _flat(&"bark", Color("#5B4632"))
-	var vine := _flat(&"vine_wood", Palette.GOLD.lerp(Palette.OLIVE, 0.25).lightened(0.1))
-	var glow := _mat(&"wood_glow", func():
+	var bark := _bark_mat()
+	var vine := _mat(&"vine3d", func():
 		var m := StandardMaterial3D.new()
-		m.albedo_color = Color("#F6CB72")
+		m.albedo_color = Palette.GOLD.lerp(Palette.OLIVE, 0.2).lightened(0.15)
+		m.roughness = 0.5
+		m.metallic = 0.2
+		m.emission_enabled = true
+		m.emission = Palette.GOLD
+		m.emission_energy_multiplier = 0.25
+		m.cull_mode = BaseMaterial3D.CULL_DISABLED
+		return m)
+	var glow := _mat(&"wood_glow3d", func():
+		var m := StandardMaterial3D.new()
+		m.albedo_color = Color(1.0, 0.82, 0.45, 0.85)
 		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		m.emission_enabled = true
+		m.emission = Color("#FFC860")
+		m.emission_energy_multiplier = 3.0
+		m.cull_mode = BaseMaterial3D.CULL_DISABLED
 		return m)
 	for n: TreeNode in t.nodes.values():
-		var r0 := _wood_r(n.depth)
-		# 关节：一颗小圆球让枝条衔接得圆润
-		var joint := MeshInstance3D.new()
-		joint.mesh = _cached_mesh(StringName("joint_%d" % n.depth), func():
-			var s := SphereMesh.new()
-			s.radius = r0 * 1.15
-			s.height = r0 * 2.3
-			s.radial_segments = 10
-			s.rings = 5
-			return s)
-		joint.material_override = bark
-		joint.position = _wpos(n.key, WOOD_Y)
-		_wood_root.add_child(joint)
 		for ch in n.children:
 			var child := t.at(ch)
 			var graft := child != null and not child.is_seed() and child.def().is_graft()
 			var a := _wpos(n.key, WOOD_Y)
 			var b := _wpos(ch, WOOD_Y)
 			var L := a.distance_to(b)
-			var r1 := _wood_r(n.depth + 1)
 			var holder := Node3D.new()
 			_wood_root.add_child(holder)
 			holder.position = a
 			holder.look_at(b, Vector3.UP)
-			var cyl := MeshInstance3D.new()
-			cyl.mesh = _cached_mesh(StringName("wood_%d_%s" % [n.depth, graft]), func():
-				var c := CylinderMesh.new()
-				c.top_radius = (r1 if not graft else 0.11)
-				c.bottom_radius = (r0 if not graft else 0.13)
-				c.height = Hex.SQRT3
-				c.radial_segments = 8
-				c.rings = 1
-				return c)
-			cyl.material_override = vine if graft else bark
-			# 圆柱默认沿 +Y：底面（粗端）朝父格。绕 X 转 +90° 后 +Y 指向 -Z（look_at 的前方）……
-			# 圆柱的 bottom 在 -Y，所以这里转 -90°：bottom 朝 +Z（父端），top 朝 -Z（子端）。
-			cyl.rotation.x = -PI * 0.5
-			cyl.position = Vector3(0, 0, -L * 0.5)
-			cyl.scale = Vector3(1, L / Hex.SQRT3, 1)
-			holder.add_child(cyl)
-			# 脉动时从父端往子端生长的金光
+			var r0 := _wood_r(n.depth) if not graft else 0.06
+			var r1 := _wood_r(n.depth + 1) if not graft else 0.05
+			var key := StringName("tube_%d_%s" % [n.depth, graft])
+			var mesh := _cached_mesh(key, func(): return TubeMesh.arch(Hex.SQRT3, r0, r1, 0.07 if not graft else 0.13, 14, 10))
+			var tube := MeshInstance3D.new()
+			tube.mesh = mesh
+			tube.material_override = vine if graft else bark
+			tube.scale = Vector3(1, 1, L / Hex.SQRT3)
+			tube.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+			holder.add_child(tube)
 			var gh := Node3D.new()
 			holder.add_child(gh)
 			var gm := MeshInstance3D.new()
-			gm.mesh = cyl.mesh
-			gm.rotation.x = -PI * 0.5
-			gm.position = Vector3(0, 0, -L * 0.5)
-			gm.scale = Vector3(1.35, L / Hex.SQRT3, 1.35)
+			gm.mesh = mesh
+			gm.scale = Vector3(1.45, 1.3, L / Hex.SQRT3)
 			gm.material_override = glow
 			gm.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			gh.add_child(gm)
@@ -966,7 +1226,7 @@ func _blob(w: float, a: float) -> MeshInstance3D:
 
 
 static func _wood_r(depth: int) -> float:
-	return maxf(0.045, 0.17 * pow(0.86, float(depth)))
+	return maxf(0.05, 0.10 * pow(0.9, float(depth)))
 
 
 # ======================================================================
@@ -985,14 +1245,37 @@ func _process(dt: float) -> void:
 	if _world == null:
 		return
 	var motion := not Game.reduce_motion
+	# 窗口缩放改变了真实像素比：重新按真实像素渲染
+	if absf(get_viewport().get_final_transform().get_scale().x - _px) > 0.01 and _px < 1.999 and _px > 0.501:
+		_layout()
+	# 背景视差：随鼠标反向轻移
+	var m := get_local_mouse_position() / size - Vector2(0.5, 0.5) if size.x > 0.0 else Vector2.ZERO
+	var want := -m.clamp(Vector2(-0.5, -0.5), Vector2(0.5, 0.5)) * size * (BG_OVERSCAN - 1.0) if motion else Vector2.ZERO
+	_parallax = _parallax.lerp(want, 1.0 - exp(-dt * 3.0))
+	for b in [_bg, _bg_old]:
+		b.size = size * BG_OVERSCAN
+		b.position = -size * (BG_OVERSCAN - 1.0) * 0.5 + _parallax
 	var anim := is_animating()
 	if _was_animating and not anim:
 		_sync3d()
 	_was_animating = anim
 	# 镜头震动
-	var sh := Fx.shake_offset(shake_t, 0.05)
-	_cam.h_offset = _ho + sh.x
-	_cam.v_offset = _vo + sh.y
+	var sh := Fx.shake_offset(shake_t, 0.05 * shake_amp)
+	if _cam_punch > 0.0:
+		_cam_punch = maxf(0.0, _cam_punch - dt * 0.35)
+		_place_cam(_cam_d / zoom * (1.0 - Fx.ease_out(minf(1.0, _cam_punch * 10.0)) * _cam_punch), 0.0, 0.0, Vector3(pan.x, 0.0, pan.y))
+	_cam.h_offset = _ho / zoom + sh.x
+	_cam.v_offset = _vo / zoom + sh.y
+	if not _cell_flash.is_empty() or _sflash > 0.0 or _wave_t >= 0.0:
+		for f in _cell_flash:
+			f[2] += dt
+		_cell_flash = _cell_flash.filter(func(f): return f[2] < f[3])
+		_sflash = maxf(0.0, _sflash - dt * 2.5)
+		if _wave_t >= 0.0:
+			_wave_t += dt
+			if _wave_t > 0.9:
+				_wave_t = -1.0
+		queue_redraw()
 	# 脉动金光沿枝条推进
 	var reached := anim_t / STEP if anim_t >= 0.0 else -1.0
 	for g in _glows:
@@ -1013,6 +1296,18 @@ func _process(dt: float) -> void:
 		hs = 1.0 + 1.6 * Fx.ease_out(hk)
 	hm.albedo_color = Color(Palette.GOLD.lightened(0.2), ha)
 	_heart.scale = Vector3(hs, 1, hs)
+	# 神树之心：轻轻浮动；脉动开始时一下子亮起、胀大
+	var sp: Piece = _pieces.get(Vector2i.ZERO)
+	if sp and sp.body:
+		var orb := sp.body.get_node_or_null("Orb") as MeshInstance3D
+		if orb:
+			orb.position.y = 0.72 + (0.04 * sin(_clock * 1.8) if motion else 0.0)
+			var burst := 0.0
+			if anim_t >= 0.0:
+				burst = 1.0 - clampf(anim_t / 0.6, 0.0, 1.0)
+			orb.scale = Vector3.ONE * (1.0 + 0.7 * burst)
+			var om := orb.material_override as StandardMaterial3D
+			om.emission_energy_multiplier = 1.6 + 6.0 * burst + (0.4 * sin(_clock * 2.0) if motion else 0.0)
 	# 末梢收获：立牌弹一下 + 金屑
 	if anim_t >= 0.0:
 		for k in _anim_tips_done:
@@ -1021,70 +1316,56 @@ func _process(dt: float) -> void:
 				if _pieces.has(k):
 					_pieces[k].bounce_t = 0.0
 					_burst(_wpos(k, 0.7), Color("#F2C46A"), 16, 2.4)
-	# 立牌
+	# 地块：落下、脉动弹跳、悬停抬起、剪枝染红、路径以外压暗
 	var tracing := trace_target != NO_CELL and anim_t < 0.0 and not _trace_nodes.is_empty()
-	var tilt := -deg_to_rad(PITCH) * STANDEE_TILT
 	_fold = move_toward(_fold, 1.0 if diagram else 0.0, dt * 4.0) if motion else (1.0 if diagram else 0.0)
 	var fold_e := Fx.ease_in_out(_fold)
-	# 悬停透视的焦点：悬停的格子（选牌/拖牌时就是目标格）
-	var focus := hover if (hover != NO_CELL and anim_t < 0.0 and _fold < 0.5) else NO_CELL
-	var fpos := _wpos(focus) if focus != NO_CELL else Vector3.ZERO
+	var smooth := 1.0 - exp(-dt * 14.0) if motion else 1.0
 	for k in _pieces:
 		var pc: Piece = _pieces[k]
-		var sp := pc.sprite
 		var y := 0.0
 		var scl := 1.0
 		if pc.pop_t >= 0.0:
 			pc.pop_t += dt / POP_DUR
 			var t := minf(pc.pop_t, 1.0)
-			sp.rotation.x = lerpf(-PI * 0.5, tilt, Fx.back_out(t))
-			scl = lerpf(0.6, 1.0, Fx.ease_out(t))
+			# 从半空落下，落地时压扁一下再弹回
+			y += 1.4 * (1.0 - Fx.ease_in_out(minf(t * 1.4, 1.0)))
+			scl = lerpf(0.75, 1.0, Fx.back_out(t))
 			if pc.pop_t >= 1.0:
 				pc.pop_t = -1.0
 				_burst(_wpos(k, 0.05), Color(Palette.CREAM.darkened(0.12), 0.9), 18, 1.4)
 				Fx.shake(self, 0.8, 0.18)
-		else:
-			sp.rotation.x = tilt
-		# 图解视图：折倒并隐去
-		if _fold > 0.0:
-			sp.rotation.x = lerpf(sp.rotation.x, -PI * 0.5, fold_e)
-		sp.visible = _fold < 0.98
 		if pc.bounce_t >= 0.0:
 			pc.bounce_t += dt / 0.38
 			var t := minf(pc.bounce_t, 1.0)
-			y += 0.28 * sin(t * PI)
-			scl *= 1.0 + 0.18 * sin(t * PI)
+			y += 0.32 * sin(t * PI)
+			scl *= 1.0 + 0.12 * sin(t * PI)
+			pc.glow = maxf(pc.glow, 1.0 - t)
 			if pc.bounce_t >= 1.0:
 				pc.bounce_t = -1.0
-		# 微风：轻轻摇摆；悬停的那一枚稍微抬起
-		sp.rotation.z = (sin(_clock * 1.4 + pc.phase) * 0.035) if motion else 0.0
-		if k == hover and not prune_mode and anim_t < 0.0:
-			scl *= 1.08
-		sp.position.y = y
-		sp.scale = Vector3.ONE * scl
-		# 剪枝预览染红、悬停路径以外的变暗
+		var hot: bool = k == hover and not prune_mode and anim_t < 0.0
+		pc.lift = lerpf(pc.lift, 0.10 if hot else 0.0, smooth)
+		pc.glow = maxf(0.0, pc.glow - dt * 2.0) if motion else 0.0
+		pc.body.position.y = y + pc.lift
+		pc.body.scale = Vector3.ONE * scl
+		pc.body.visible = fold_e < 0.98
 		var col := Color.WHITE
 		var is_seed := tree != null and tree.has(k) and tree.at(k).is_seed()
 		if highlight.has(k) or (prune_mode and k == hover and not is_seed):
 			col = Color(1.0, 0.55, 0.5)
 		elif tracing and not _trace_nodes.has(k):
-			col = Color(0.55, 0.55, 0.55)
-		# 悬停透视：挡在焦点格前面（离镜头更近、左右相近）的立牌变淡
-		if focus != NO_CELL and k != focus:
-			var w := _wpos(k)
-			var dz := w.z - fpos.z
-			if dz > 0.1 and dz < 3.3 and absf(w.x - fpos.x) < 1.6:
-				col.a = XRAY_ALPHA
-		col.a *= 1.0 - fold_e * 0.8
-		sp.modulate = sp.modulate.lerp(col, 1.0 - exp(-dt * 14.0)) if motion else col
+			col = Color(0.55, 0.55, 0.58)
+		if pc.mat:
+			pc.tint = pc.tint.lerp(col, smooth)
+			pc.mat.set_shader_parameter("modulate", pc.tint)
+			pc.mat.set_shader_parameter("glow", maxf(pc.glow * 2.0, 0.6 if hot else 0.0))
 	for i in range(_leaving.size() - 1, -1, -1):
 		var pc := _leaving[i]
 		pc.leave_t += dt / 0.4
 		var t := minf(pc.leave_t, 1.0)
-		pc.sprite.rotation.x = lerpf(tilt, -PI * 0.5, Fx.ease_in_out(t))
-		pc.sprite.rotation.z = t * 0.8
-		pc.node.position.y = 0.6 * sin(t * PI)
-		pc.sprite.scale = Vector3.ONE * maxf(0.01, 1.0 - t * 0.7)
+		pc.body.position.y = 0.6 * sin(t * PI)
+		pc.body.rotation.z = t * 1.2
+		pc.body.scale = Vector3.ONE * maxf(0.01, 1.0 - t * 0.9)
 		if pc.leave_t >= 1.0:
 			pc.node.queue_free()
 			_leaving.remove_at(i)
@@ -1102,7 +1383,10 @@ func _process(dt: float) -> void:
 		_light.light_energy = _base_energy
 
 
-## 预览立牌：悬停可放置格时，一枚半透明的立牌浮在格子上方。
+## 预览地块：悬停可放置格时，一块半透明的地块浮在格子上方。
+var _ghost_mat: ShaderMaterial
+
+
 func _update_ghost() -> void:
 	var gt := drag_type if drag_type != &"" else ghost_type
 	var show := gt != &"" and anim_t < 0.0 and targets.has(hover) and Cards.has(gt) and not (tree and tree.has(hover))
@@ -1113,17 +1397,59 @@ func _update_ghost() -> void:
 	if _ghost == null or _ghost_type != gt:
 		if _ghost:
 			_ghost.queue_free()
-		var n := TreeNode.new()
-		n.type = gt
-		_ghost = _standee_sprite(gt, standee_height(n))
-		_ghost.alpha_cut = SpriteBase3D.ALPHA_CUT_DISABLED
-		_ghost.modulate = Color(1, 1, 1, 0.55)
-		_ghost.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		var mi := make_tile(gt)
+		_ghost_mat = mi.get_surface_override_material(0)
+		_ghost_mat.set_shader_parameter("glow", 0.8)
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_ghost = mi
 		_ghost_type = gt
 		_piece_root.add_child(_ghost)
 	_ghost.visible = true
-	var bob := 0.06 * sin(_clock * 3.0) if not Game.reduce_motion else 0.0
-	_ghost.position = _wpos(hover, 0.12 + bob)
+	var bob := 0.04 * sin(_clock * 3.0) if not Game.reduce_motion else 0.0
+	_ghost.position = _wpos(hover, 0.22 + bob)
+
+
+## 计分演出：一组格子亮起（牌型），地块发光、弹一下并迸出彩屑。
+func flash_cells(cells: Array, col: Color, dur: float = 0.8) -> void:
+	if Game.reduce_motion:
+		return
+	_cell_flash.append([cells, col, 0.0, dur])
+	for c in cells:
+		if _pieces.has(c):
+			var pc: Piece = _pieces[c]
+			pc.bounce_t = 0.0
+			pc.glow = 1.0
+			if pc.mat:
+				pc.mat.set_shader_parameter("glow_color", col.lightened(0.2))
+		_burst(_wpos(c, 0.3), col.lightened(0.3), 8, 1.8)
+
+
+## 镜头猛地推近一点再弹回（amount = 推近的比例，0.05 = 5%）。
+func punch_camera(amount: float) -> void:
+	if Game.reduce_motion:
+		return
+	_cam_punch = maxf(_cam_punch, amount)
+
+
+## 全屏闪一下（大额脉动）。
+func flash_screen(col: Color, strength: float = 1.0) -> void:
+	if Game.reduce_motion:
+		return
+	_sflash = strength
+	_sflash_col = col
+
+
+## 一圈金色冲击波从树心扩散（大额脉动）。
+func shockwave(col: Color) -> void:
+	if Game.reduce_motion:
+		return
+	_wave_t = 0.0
+	_wave_col = col
+	_burst(_wpos(Vector2i.ZERO, 0.6), col.lightened(0.3), 40, 4.5)
+
+
+var _wave_t: float = -1.0
+var _wave_col: Color = Color.WHITE
 
 
 ## 一次性的粒子：尘土 / 金屑 / 叶屑。
@@ -1175,9 +1501,27 @@ func _draw() -> void:
 	var breathe := 0.5 + 0.5 * sin(_clock * 2.6)
 	var gt := drag_type if drag_type != &"" else ghost_type
 
-	# ---------- 雷击闪光 ----------
+	# ---------- 雷击闪光 / 大额脉动的全屏闪光 ----------
 	if _flash > 0.0:
 		draw_rect(Rect2(Vector2.ZERO, size), Color(0.92, 0.95, 1.0, 0.22 * _flash))
+	if _sflash > 0.0:
+		draw_rect(Rect2(Vector2.ZERO, size), Color(_sflash_col, 0.45 * _sflash * _sflash))
+	# ---------- 冲击波：从树心扩散的一圈六边形光环 ----------
+	if _wave_t >= 0.0:
+		var wr := 0.6 + Fx.ease_out(_wave_t / 0.9) * (board_radius() + 1.5) * Hex.SQRT3
+		var ring := PackedVector2Array()
+		for i in 7:
+			var ang := deg_to_rad(60.0 * i - 30.0)
+			ring.append(_proj(Vector3(cos(ang) * wr, 0.05, sin(ang) * wr)))
+		draw_polyline(ring, Color(_wave_col, 0.9 * (1.0 - _wave_t / 0.9)), 10.0 * k * (1.0 - _wave_t / 0.9) + 2.0, true)
+	# ---------- 牌型逐个点亮 ----------
+	for f in _cell_flash:
+		var fa: float = 1.0 - f[2] / f[3]
+		for c in f[0]:
+			var hp := _proj_hex(c, 0.95, 0.16)
+			draw_colored_polygon(hp, Color(f[1], 0.38 * fa))
+			hp.append(hp[0])
+			draw_polyline(hp, Color(f[1].lightened(0.3), 0.95 * fa), 4.0 * k, true)
 
 	# ---------- 可放置格：台面上一块柔光 ----------
 	if anim_t < 0.0:
@@ -1213,27 +1557,15 @@ func _draw() -> void:
 			big.append(big[0])
 			draw_polyline(big, Color(Palette.OCHRE, 0.35 + 0.2 * breathe), 2.0 * k, true)
 
-	# ---------- 景观视图的地面编码：类别色光圈 + 末梢标记 + 立牌顶上的收获数 ----------
+	# ---------- 末梢：地块外一圈细细的赭色描边（收获数字只在脉动和悬停时出现）----------
 	var land_a := 1.0 - Fx.ease_in_out(_fold)
-	if land_a > 0.02:
-		for n: TreeNode in t.nodes.values():
-			if n.is_seed():
+	if land_a > 0.02 and pulse != null and anim_t < 0.0:
+		for key in pulse.tips:
+			if not t.has(key) or t.at(key).is_seed():
 				continue
-			var col := Palette.card_color(n.def().color_key)
-			var ring := _proj_hex(n.key, 0.74, 0.012)
-			draw_colored_polygon(ring, Color(col, 0.20 * land_a))
-			var ol := ring.duplicate()
-			ol.append(ring[0])
-			draw_polyline(ol, Color(col, 0.65 * land_a), 1.8 * k, true)
-			var is_tip := pulse != null and pulse.tips.has(n.key)
-			if is_tip:
-				var tr := _proj_hex(n.key, 0.88, 0.012)
-				tr.append(tr[0])
-				draw_polyline(tr, Color(Palette.OCHRE, 0.85 * land_a), 2.6 * k, true)
-				if anim_t < 0.0 and pulse.contrib.has(n.key) and n.key != hover:
-					var top := _proj(_standee_top(n.key, standee_height(n)))
-					_pill(top + Vector2(0, -9 * k), Pulse.big(pulse.contrib[n.key]), int(12 * k),
-						Color(Palette.TERRA.darkened(0.1), land_a), Color(Palette.SHEET, 0.9 * land_a))
+			var tr := _proj_hex(key, 0.84, 0.01)
+			tr.append(tr[0])
+			draw_polyline(tr, Color(Palette.OCHRE.lightened(0.15), 0.7 * land_a), 2.0 * k, true)
 
 	# ---------- 图解视图：旧版式的六边形牌片 ----------
 	if _fold > 0.02:
@@ -1253,8 +1585,9 @@ func _draw() -> void:
 				var glow_a := clampf(1.0 - dt * 2.5, 0.0, 1.0)
 				if glow_a > 0.0:
 					draw_circle(p, s * (0.7 + dt * 1.2), Color("#F2C46A", 0.32 * glow_a))
-				_text_outlined(title, p + Vector2(0, -s * 1.1 - rise), "+%s" % Pulse.big(pulse.contrib[n.key]),
-					int((22 + 8 * clampf(1.0 - dt * 3.0, 0.0, 1.0)) * k), Palette.TERRA)
+				if tip_numbers:
+					_text_outlined(title, p + Vector2(0, -s * 1.1 - rise), "+%s" % Pulse.big(pulse.contrib[n.key]),
+						int((22 + 8 * clampf(1.0 - dt * 3.0, 0.0, 1.0)) * k), Palette.TERRA)
 		elif flash.has(n.key) and not tracing and n.key != hover:
 			_text_outlined(body, p + Vector2(0, -s * 1.05), "+%s" % Pulse.big(flash[n.key]), int(15 * k), Color(Palette.TERRA, 0.85))
 		if n.key == _blink and _blink_t > 0.0:
@@ -1392,18 +1725,31 @@ func _draw_node_card(n: TreeNode, pulse: Pulse.Result, k: float) -> void:
 		w = maxf(w, f.get_string_size(l[0], HORIZONTAL_ALIGNMENT_LEFT, -1, l[1]).x)
 		h += l[1] + 6.0
 	w += 26.0
+	# 左侧一幅清晰的牌面插画（2D 原图，不依赖 3D 采样）
+	var art: Texture2D = null if n.is_seed() else CardArt.texture(n.def().art_id())
+	var art_w := 0.0
+	if art:
+		h = maxf(h, 150.0 * sk)
+		art_w = (h - 16.0) * 0.72
+		w += art_w + 10.0
 	var anchor := _proj(_wpos(n.key, standee_height(n) + 0.2))
-	var rect := Rect2(anchor + Vector2(-w * 0.5, -h - 6.0), Vector2(w, h))
+	var rect := Rect2(anchor + Vector2(-w * 0.5, -h - 18.0), Vector2(w, h))
 	rect.position.x = clampf(rect.position.x, 8.0, size.x - w - 8.0)
 	rect.position.y = maxf(8.0, rect.position.y)
 	draw_rect(Rect2(rect.position + Vector2(4, 5), rect.size), Color(Palette.INK, 0.35))
 	draw_rect(rect, Color(Palette.SHEET, 0.97))
 	draw_rect(rect, Palette.INK, false, 1.5)
 	draw_rect(rect.grow(-4), Color(Palette.GOLD, 0.6), false, 1.0)
+	var tx := rect.position.x + 13.0
+	if art:
+		var ar := Rect2(rect.position + Vector2(8, 8), Vector2(art_w, h - 16.0))
+		draw_texture_rect(art, ar, false)
+		draw_rect(ar, Color(Palette.INK, 0.6), false, 1.0)
+		tx += art_w + 6.0
 	var y := rect.position.y + 8.0
 	for l in lines:
 		y += l[1]
-		draw_string(l[3], Vector2(rect.position.x + 13.0, y), l[0], HORIZONTAL_ALIGNMENT_LEFT, -1, l[1], l[2])
+		draw_string(l[3], Vector2(tx, y), l[0], HORIZONTAL_ALIGNMENT_LEFT, -1, l[1], l[2])
 		y += 6.0
 
 

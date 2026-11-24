@@ -9,14 +9,14 @@ const RICH_BONUS := 2
 ## 共鸣：牌桌上同一流派的牌数达到这些阈值时分别激活第 1/2/3 层。木是基础流派，没有共鸣。
 const RESONANCE_STEPS: Array[int] = [2, 4, 6]
 ## 齿轮共鸣：联动加成的倍数；熔炉共鸣：火候倍率的倍数（按层数 0–3）。
-const GEAR_RES := [1.0, 2.0, 3.0, 4.0]
-const FORGE_RES := [1.0, 2.0, 3.0, 4.0]
+const GEAR_RES := [1.0, 2.0, 2.75, 3.5]
+const FORGE_RES := [1.0, 2.5, 3.5, 4.5]
 ## 星辰共鸣：整树总分倍率；商会共鸣：每次脉动额外养分；镜像共鸣：每对对称牌的总分加成；
 ## 封印共鸣：释放倍率每次封存额外 +x。
-const STAR_RES := [1.0, 1.1, 1.25, 1.5]
-const COIN_RES := [0, 2, 3, 5]
-const MIRROR_RES := [0.0, 0.3, 0.6, 1.0]
-const SEAL_RES := [0.0, 1.0, 1.75, 2.75]
+const STAR_RES := [1.0, 1.05, 1.15, 1.25]
+const COIN_RES := [0, 3, 5, 8]
+const MIRROR_RES := [0.0, 0.5, 1.0, 1.5]
+const SEAL_RES := [0.0, 2.5, 4.0, 6.0]
 ## 共鸣说明（界面用）：每层的效果。
 ## 共鸣说明（界面用），数字直接取自上面的常量。
 static func resonance_desc(f: StringName) -> String:
@@ -151,7 +151,7 @@ class Result:
 	var stored_total: int = 0
 	## 牌桌上对称的同类牌对数。
 	var pairs: int = 0
-	## 牌桌上有逆行（星辰牌每回合都按最后一回合算）。
+	## 牌桌上有逆行（星辰牌的回合倒着数）。
 	var retro: bool = false
 	## 牌桌上有永动机。
 	var link_all: bool = false
@@ -493,8 +493,9 @@ static func _modifiers2(tree: TreeModel, n: TreeNode, def: CardDef, v: int, ctx:
 		v = to_int(v * ECLIPSE_MULT)
 		if tr != null: tr.append(_step("日蚀", "×%s" % num(ECLIPSE_MULT), v))
 	var turn := ctx.turn + (ctx.star_turn_bonus if def.has_family(&"star") else 0)
-	if res.retro and def.has_family(&"star") and turn < ctx.turns_total:
-		turn = ctx.turns_total
+	if res.retro and def.has_family(&"star"):
+		# 逆行：回合倒着数——第 1 回合按最后一回合算，最后一回合按第 1 回合算。
+		turn = clampi(ctx.turns_total - turn + 1, 1, ctx.turns_total)
 		if tr != null: tr.append(_step("逆行", "按第 %d 回合算" % turn, v))
 	if def.turn_add != 0.0:
 		v += int(def.turn_add * turn)

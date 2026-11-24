@@ -14,7 +14,13 @@ const SCENES := {
 }
 
 const SETTINGS_PATH := "user://settings.cfg"
-const SFX := [&"place", &"prune", &"pulse", &"tip", &"click", &"win", &"lose"]
+const SFX := [&"place", &"prune", &"pulse", &"tip", &"click", &"win", &"lose",
+	&"slam", &"boom", &"pattern", &"chord", &"overkill", &"goal", &"flow", &"draw", &"reward", &"banner", &"season", &"shatter"]
+## 音乐与环境音：按季节 / 天灾 / 场景选曲（文件在 assets/music、assets/ambience，由 tools/audio/synth_audio.py 合成）。
+const SEASON_MUSIC := {1: &"spring", 2: &"summer", 3: &"autumn", 4: &"winter", 5: &"calamity"}
+const SEASON_AMB := {1: &"birds", 2: &"crickets", 3: &"wind", 4: &"winter_wind", 5: &"wind"}
+const CALAMITY_AMB := {&"flood": &"rain", &"lightning": &"rain", &"wildfire": &"fire", &"gale": &"wind",
+	&"drought": &"wind", &"pests": &"crickets", &"eclipse": &"winter_wind"}
 
 var run: RunState
 ## 收藏与解锁（流派、启程者、图鉴统计、联动谱）。
@@ -27,6 +33,14 @@ var reduce_motion: bool = false
 var tutorial: Tutorial
 var tutorial_done: bool = false
 var volume: float = 0.75
+## 音乐、环境音音量（0..1）；volume 是音效音量。
+var music_volume: float = 0.55
+var ambience_volume: float = 0.5
+var _music: Array[AudioStreamPlayer] = []
+var _amb: Array[AudioStreamPlayer] = []
+var _music_id: StringName = &""
+var _amb_id: StringName = &""
+var _streams: Dictionary = {}
 
 var _sfx: Dictionary = {}
 var _players: Array[AudioStreamPlayer] = []
@@ -43,11 +57,107 @@ func _ready() -> void:
 		var path := "res://assets/sfx/%s.wav" % id
 		if ResourceLoader.exists(path):
 			_sfx[id] = load(path)
-	for i in 6:
+	_setup_buses()
+	for i in 12:
 		var p := AudioStreamPlayer.new()
+		p.bus = &"SFX"
 		add_child(p)
 		_players.append(p)
+	for i in 2:
+		var m := AudioStreamPlayer.new()
+		m.bus = &"Music"
+		add_child(m)
+		_music.append(m)
+		var a := AudioStreamPlayer.new()
+		a.bus = &"Ambience"
+		add_child(a)
+		_amb.append(a)
+	apply_volumes()
 	_add_paper_overlay()
+
+
+## 三条总线：音乐、环境音、音效，都送进 Master。
+func _setup_buses() -> void:
+	for nm in [&"Music", &"Ambience", &"SFX"]:
+		if AudioServer.get_bus_index(nm) < 0:
+			AudioServer.add_bus()
+			var i := AudioServer.bus_count - 1
+			AudioServer.set_bus_name(i, nm)
+			AudioServer.set_bus_send(i, &"Master")
+
+
+func apply_volumes() -> void:
+	for pair in [[&"Music", music_volume], [&"Ambience", ambience_volume], [&"SFX", volume]]:
+		var i := AudioServer.get_bus_index(pair[0])
+		if i >= 0:
+			AudioServer.set_bus_volume_db(i, linear_to_db(maxf(0.0001, pair[1])))
+			AudioServer.set_bus_mute(i, pair[1] <= 0.0)
+
+
+func _loop_stream(dir: String, id: StringName) -> AudioStream:
+	var key := dir + String(id)
+	if _streams.has(key):
+		return _streams[key]
+	var path := "res://assets/%s/%s.wav" % [dir, id]
+	if not ResourceLoader.exists(path):
+		return null
+	var st: AudioStream = load(path)
+	if st is AudioStreamWAV:
+		var w := st as AudioStreamWAV
+		w.loop_mode = AudioStreamWAV.LOOP_FORWARD
+		w.loop_begin = 0
+		w.loop_end = int(w.get_length() * w.mix_rate)
+	_streams[key] = st
+	return st
+
+
+## 交叉淡入一首循环（音乐或环境音）。id 为空时淡出。
+func _crossfade(players: Array[AudioStreamPlayer], st: AudioStream, fade: float) -> void:
+	var cur := players[0]
+	var nxt := players[1]
+	players.reverse()
+	if cur.playing:
+		var t1 := cur.create_tween()
+		t1.tween_property(cur, "volume_db", -60.0, fade)
+		t1.tween_callback(cur.stop)
+	if st == null:
+		return
+	nxt.stream = st
+	nxt.volume_db = -60.0
+	nxt.play(randf() * st.get_length() * 0.5)
+	var t2 := nxt.create_tween()
+	t2.tween_property(nxt, "volume_db", 0.0, fade)
+
+
+func play_music(id: StringName, fade: float = 1.6) -> void:
+	if id == _music_id:
+		return
+	_music_id = id
+	_crossfade(_music, _loop_stream("music", id) if id != &"" else null, fade)
+
+
+func play_ambience(id: StringName, fade: float = 2.0) -> void:
+	if id == _amb_id:
+		return
+	_amb_id = id
+	_crossfade(_amb, _loop_stream("ambience", id) if id != &"" else null, fade)
+
+
+## 场景氛围：季节曲 + 季节 / 天灾环境音；scene 为 menu / codex 时放主题曲，market / map / event 放集市曲。
+func scene_audio(scene: StringName, season: int = 1, calamity: StringName = &"") -> void:
+	match scene:
+		&"menu", &"codex":
+			play_music(&"theme")
+			play_ambience(&"wind")
+		&"market", &"map", &"event":
+			play_music(&"market")
+			play_ambience(SEASON_AMB.get(mini(season, 4), &"wind"))
+		_:
+			play_music(SEASON_MUSIC.get(season, &"spring"))
+			var amb: StringName = SEASON_AMB.get(season, &"wind")
+			if season == 5 and CALAMITY_AMB.has(calamity):
+				amb = CALAMITY_AMB[calamity]
+			play_ambience(amb)
 
 
 ## 全屏纸纹（正片叠底），盖在所有界面之上、不拦截鼠标。
@@ -64,16 +174,24 @@ func _add_paper_overlay() -> void:
 	layer.add_child(rect)
 
 
-func sfx(id: StringName, pitch: float = 1.0) -> void:
+func sfx(id: StringName, pitch: float = 1.0, gain_db: float = 0.0) -> void:
 	if volume <= 0.0 or not _sfx.has(id):
 		return
+	# 先找空闲的播放器；都在响时抢播放得最久的那个（不再直接丢掉新音效）
+	var pick: AudioStreamPlayer = null
+	var oldest := -1.0
 	for p in _players:
 		if not p.playing:
-			p.stream = _sfx[id]
-			p.pitch_scale = pitch
-			p.volume_db = linear_to_db(volume)
-			p.play()
-			return
+			pick = p
+			break
+		var pos := p.get_playback_position()
+		if pos > oldest:
+			oldest = pos
+			pick = p
+	pick.stream = _sfx[id]
+	pick.pitch_scale = pitch
+	pick.volume_db = gain_db
+	pick.play()
 
 
 func load_settings() -> void:
@@ -81,6 +199,8 @@ func load_settings() -> void:
 	if cfg.load(SETTINGS_PATH) == OK:
 		reduce_motion = bool(cfg.get_value("ui", "reduce_motion", false))
 		volume = float(cfg.get_value("audio", "volume", 0.75))
+		music_volume = float(cfg.get_value("audio", "music", 0.55))
+		ambience_volume = float(cfg.get_value("audio", "ambience", 0.5))
 		tutorial_done = bool(cfg.get_value("ui", "tutorial_done", false))
 
 
@@ -88,6 +208,8 @@ func save_settings() -> void:
 	var cfg := ConfigFile.new()
 	cfg.set_value("ui", "reduce_motion", reduce_motion)
 	cfg.set_value("audio", "volume", volume)
+	cfg.set_value("audio", "music", music_volume)
+	cfg.set_value("audio", "ambience", ambience_volume)
 	cfg.set_value("ui", "tutorial_done", tutorial_done)
 	cfg.save(SETTINGS_PATH)
 

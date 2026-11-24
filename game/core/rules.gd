@@ -15,8 +15,8 @@ const CALAMITY_STAGE := 5
 ## 难度锚点：规划者 bot 有传说通关约 50%，无传说 ≥ 35%。
 const TARGETS := [
 	[87, 220, 550, 1400, 1400],
-	[2600, 9500, 24000, 60000, 60000],
-	[60000, 300000, 800000, 2000000, 2000000],
+	[4100, 15000, 39000, 98000, 98000],
+	[97000, 480000, 1300000, 3300000, 3300000],
 ]
 const SEASON_NAMES: Array[String] = ["春", "夏", "秋", "冬", "天灾"]
 const TURNS := 5
@@ -53,6 +53,8 @@ const LOW_BUDS := 2
 ## 超额奖励：本季累计达到目标的 10 倍、100 倍、1000 倍……每一档多得这么多养分（最多 3 档）。
 const OVERKILL_SAP := 2
 const OVERKILL_MAX_TIERS := 3
+## 传说「解印」在牌桌上时，季末释放封存再 ×这个数。
+const BREAK_PASSIVE_MULT := 1.5
 const RELIC_SELL_RATIO := 0.5
 
 const START_DECK := {

@@ -98,8 +98,19 @@ static func shake(node: Object, amount: float = 2.0, dur: float = 0.2) -> void:
 	var n := node as Node
 	if n == null:
 		return
+	if "shake_amp" in node:
+		node.set("shake_amp", amount / 2.0)
 	var tw: Tween = n.create_tween()
 	tw.tween_method(func(v: float): node.set("shake_t", v), 1.0, 0.0, dur).set_trans(Tween.TRANS_SINE)
+
+
+## 顿帧：时间几乎停住一瞬（大额计分的冲击感）。用真实时间计时，不受自身减速影响。
+static func hitstop(tree: SceneTree, sec: float = 0.08, scale: float = 0.05) -> void:
+	if Game.reduce_motion or tree == null:
+		return
+	Engine.time_scale = scale
+	await tree.create_timer(sec, true, false, true).timeout
+	Engine.time_scale = 1.0
 
 
 ## 震动偏移量（配合 shake_t 使用）。

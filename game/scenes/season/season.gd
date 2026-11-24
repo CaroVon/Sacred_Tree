@@ -52,9 +52,9 @@ var relic_bar: RelicBar
 ## 整屏布局：左右两列宽度，网格四周留给 HUD 的边距。
 const LEFT_W := 360.0
 const RIGHT_W := 290.0
-const SIDE_W := 380.0
-const TOP_H := 170.0
-const BOTTOM_H := 185.0
+const SIDE_W := 330.0
+const TOP_H := 150.0
+const BOTTOM_H := 160.0
 ## 脉动结算单。
 var sheet_panel: PrintBox
 var sheet_box: VBoxContainer
@@ -92,9 +92,11 @@ func _ready() -> void:
 ## 一季开始时的提示：天灾标题卡（标出被打中的格子）、开局的流派引导、第 1 年秋的进阶提示。
 func _season_intro() -> void:
 	var msgs: Array[String] = []
+	await _season_card()
+	if not is_inside_tree():
+		return
 	if run.is_calamity():
 		var cd := Cards.calamity(run.calamity)
-		_stamp_text("天灾 · " + cd.display_name)
 		msgs.append("天灾：%s——%s" % [cd.display_name, cd.desc])
 		if not run.last_calamity_hit.is_empty():
 			msgs.append("被打中的格子已用红框标出；送回手牌的牌这一季不占手牌上限。")
@@ -111,6 +113,29 @@ func _season_intro() -> void:
 			msgs.append("进阶提示：目标每季都在涨，一个嫁接点很快就不够用。试着再搭一个——两个挨着的末梢中间放一张藤。")
 	if not msgs.is_empty():
 		_toast(msgs)
+
+
+## 季节开场的标题卡：季节名 + 季节特性；新的一年先出「第 N 年」并从树心扩散一圈年轮；天灾季是暗红的「天灾 · X」。
+const SEASON_COLORS := {1: Color("#F6C9D0"), 2: Color("#FFE08A"), 3: Color("#F2A15E"), 4: Color("#D6E6FF"), 5: Color("#FF8A6A")}
+
+
+func _season_card() -> void:
+	if Game.reduce_motion:
+		return
+	if run.season == 1 and run.year > 1:
+		Game.sfx(&"banner")
+		board.shockwave(Palette.GOLD.lightened(0.2))
+		await _banner("第 %d 年" % run.year, Color("#FFE7A0"), 0.6, "神树又长了一圈年轮")
+		if not is_inside_tree():
+			return
+	Game.sfx(&"season")
+	if run.is_calamity():
+		var cd := Cards.calamity(run.calamity)
+		board.flash_screen(Color("#FF8A6A"), 0.5)
+		Fx.shake(board, 3.0, 0.3)
+		await _banner("天灾 · " + cd.display_name, SEASON_COLORS[5], 0.9, cd.desc)
+	else:
+		await _banner(run.season_label(), SEASON_COLORS.get(run.season, Color.WHITE), 0.7, Rules.season_trait(run.season))
 
 
 ## 每个启程者开局时的一句玩法引导。
@@ -398,6 +423,8 @@ func _build() -> void:
 	fly_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(fly_layer)
 	board.tip_harvested.connect(_on_tip_harvested)
+	# 收获数字改由飞向计数槽的浮字表现，牌桌上不再重复画一次
+	board.set("tip_numbers", false)
 
 	_build_modal()
 
@@ -566,6 +593,7 @@ func _refresh() -> void:
 	if board is Board3D:
 		if board._season != run.season or board._calamity != (run.calamity if run.is_calamity() else &""):
 			board.set_mood(run.season, run.calamity)
+	Game.scene_audio(&"season", run.season, run.calamity if run.is_calamity() else &"")
 	lbl_patterns.text = "" if res.patterns.is_empty() else "牌型：" + "、".join(res.patterns.map(func(p): return p.label))
 	lbl_patterns.visible = not res.patterns.is_empty()
 	var pend := run.pending_release()
@@ -752,6 +780,9 @@ func _place(c: Vector2i) -> void:
 		return
 	var card_id := run.hand[sel]
 	var played := sel
+	var pv0 := run.preview()
+	var res0: Dictionary = pv0.resonance.duplicate()
+	var total0 := pv0.total
 	if run.place(sel, c):
 		hand_view.mark_played(played, board.global_position + board.center_of(c))
 		Game.sfx(&"place")
@@ -762,6 +793,34 @@ func _place(c: Vector2i) -> void:
 		sel = -1
 		flash = {}
 		_after_action()
+		_after_place_fx(c, res0, total0)
+
+
+## 放牌后的反馈：下次脉动预计的增减浮字；某个流派的共鸣升了一层时，横幅 + 和弦 + 该流派的牌一起亮。
+func _after_place_fx(c: Vector2i, res0: Dictionary, total0: int) -> void:
+	var pv := run.preview()
+	var d := pv.total - total0
+	if d != 0:
+		var at := board.global_position + board.center_of(c) + Vector2(0, -board.hex_size * 1.3)
+		_float_label(("预计 +%s" if d > 0 else "预计 −%s") % Pulse.big(absi(d)), at,
+			Palette.GOLD.lightened(0.35) if d > 0 else Palette.TERRA.lightened(0.2), 26, 40.0, 1.1)
+	for f in pv.resonance:
+		var tier: int = pv.resonance[f]
+		if tier > int(res0.get(f, 0)):
+			_resonance_up(f, tier)
+			break
+
+
+func _resonance_up(f: StringName, tier: int) -> void:
+	var col := Palette.family_color(f)
+	var cells: Array = []
+	for n: TreeNode in run.tree.nodes.values():
+		if not n.is_seed() and n.def().has_family(f):
+			cells.append(n.key)
+	board.flash_cells(cells, col, 1.1)
+	Game.sfx(&"chord")
+	var nm: String = CardDef.FAMILY_NAMES.get(f, String(f))
+	_banner("%s共鸣 · 第%d层" % [nm, tier], col.lightened(0.35), 0.9, Pulse.resonance_desc(f))
 
 
 func _on_cell_hovered(c: Vector2i) -> void:
@@ -987,12 +1046,19 @@ func _end_turn() -> void:
 		_score_target = target_before
 	_after_action()
 	_build_sheet()
+	if _score_shown >= 0:
+		_tally_open(target_before)
 	board.play_pulse(snap, res)
 	if relic_bar:
 		relic_bar.flash(_active_relics(snap, res, first_pulse), 0.25)
 	if board.is_animating():
 		await board.pulse_finished
 	if _score_shown >= 0:
+		# 等所有飞行中的数字落进计数槽（修复：最后一个末梢的数字晚于脉动尾声落地）
+		var guard := 0
+		while _tally_flying > 0 and guard < 120:
+			await get_tree().process_frame
+			guard += 1
 		await _score_finale(res, before + res.total, target_before)
 		if not is_inside_tree():
 			return
@@ -1006,37 +1072,129 @@ func _end_turn() -> void:
 
 # ---------- 计分演出 ----------
 
-## 一个末梢收获：数字从牌桌飞进左上角的季节铭牌，落地时分数跳一下。
-func _on_tip_harvested(_cell: Vector2i, amount: int, at: Vector2) -> void:
-	if _score_shown < 0 or amount <= 0:
+## 计分演出的「本回合」计数槽：浮在牌桌上方，收集每个末梢飞来的数字，最后整笔飞进季节铭牌。
+var _tally: Label
+var _tally_sub: Label
+var _tally_val: int = 0
+var _tally_flying: int = 0
+var _tally_target: int = 1
+
+
+func _tally_open(target: int) -> void:
+	_tally_close()
+	_tally_val = 0
+	_tally_flying = 0
+	_tally_target = maxi(1, target)
+	_tally = Label.new()
+	_tally.text = "0"
+	_tally.add_theme_font_override("font", Palette.numeric())
+	_tally.add_theme_font_size_override("font_size", 56)
+	_tally.add_theme_color_override("font_color", Palette.CREAM)
+	_tally.add_theme_color_override("font_outline_color", Color(Palette.INK, 0.9))
+	_tally.add_theme_constant_override("outline_size", 14)
+	_tally.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_tally.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	fly_layer.add_child(_tally)
+	_tally_sub = Label.new()
+	_tally_sub.text = "本回合收获"
+	_tally_sub.add_theme_font_size_override("font_size", 18)
+	_tally_sub.add_theme_color_override("font_color", Palette.GOLD.lightened(0.35))
+	_tally_sub.add_theme_color_override("font_outline_color", Color(Palette.INK, 0.9))
+	_tally_sub.add_theme_constant_override("outline_size", 6)
+	_tally_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_tally_sub.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	fly_layer.add_child(_tally_sub)
+	_tally_layout()
+	_tally.modulate.a = 0.0
+	_tally_sub.modulate.a = 0.0
+	var tw := _tally.create_tween().set_parallel(true)
+	tw.tween_property(_tally, "modulate:a", 1.0, 0.2)
+	tw.tween_property(_tally_sub, "modulate:a", 1.0, 0.2)
+
+
+func _tally_center() -> Vector2:
+	var r := board.get_global_rect()
+	var left := r.position.x + board.margins.x
+	var right := r.end.x - board.margins.z
+	return Vector2((left + right) * 0.5, r.position.y + board.margins.y + 46.0)
+
+
+func _tally_layout() -> void:
+	if _tally == null:
 		return
-	var from := board.global_position + at
-	var to := lbl_score.global_position + lbl_score.size * 0.5
+	_tally.reset_size()
+	_tally.pivot_offset = _tally.size * 0.5
+	_tally.position = _tally_center() - _tally.size * 0.5
+	_tally_sub.reset_size()
+	_tally_sub.position = _tally_center() + Vector2(-_tally_sub.size.x * 0.5, _tally.size.y * 0.5 - 6.0)
+
+
+func _tally_set(v: int, extra: String = "") -> void:
+	if _tally == null:
+		return
+	_tally_val = v
+	_tally.text = Pulse.big(v) + extra
+	# 数越大字越大、越金
+	var ratio := float(v) / float(_tally_target)
+	_tally.add_theme_font_size_override("font_size", int(clampf(56.0 + 18.0 * log(maxf(1.0, ratio * 10.0)) / log(10.0), 56.0, 96.0)))
+	_tally.add_theme_color_override("font_color", Palette.CREAM.lerp(Palette.GOLD.lightened(0.25), clampf(ratio, 0.0, 1.0)))
+	_tally_layout()
+
+
+func _tally_close() -> void:
+	if _tally:
+		_tally.queue_free()
+	if _tally_sub:
+		_tally_sub.queue_free()
+	_tally = null
+	_tally_sub = null
+
+
+## 末梢收获的档位：0 小、1 中（≥ 目标 5%）、2 大（≥ 目标 25%）。
+func _tier(amount: int) -> int:
+	var r := float(amount) / float(maxi(1, _tally_target))
+	return 2 if r >= 0.25 else (1 if r >= 0.05 else 0)
+
+
+## 一个末梢收获：数字在地块上方弹出，再飞进「本回合」计数槽；落地时计数跳一下。
+func _on_tip_harvested(_cell: Vector2i, amount: int, at: Vector2) -> void:
+	if _score_shown < 0 or amount <= 0 or _tally == null:
+		return
+	var tier := _tier(amount)
+	var from := board.global_position + at + Vector2(0, -board.hex_size * 0.9)
+	var to := _tally_center()
 	var l := Label.new()
 	l.text = "+%s" % Pulse.big(amount)
 	l.add_theme_font_override("font", Palette.title())
-	l.add_theme_font_size_override("font_size", 34)
-	l.add_theme_color_override("font_color", Palette.TERRA)
-	l.add_theme_color_override("font_outline_color", Palette.CREAM)
-	l.add_theme_constant_override("outline_size", 8)
+	l.add_theme_font_size_override("font_size", [30, 40, 54][tier])
+	l.add_theme_color_override("font_color", [Palette.CREAM, Palette.GOLD.lightened(0.3), Color("#FFE08A")][tier])
+	l.add_theme_color_override("font_outline_color", Color(Palette.INK, 0.9))
+	l.add_theme_constant_override("outline_size", 10)
 	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	fly_layer.add_child(l)
 	l.reset_size()
 	l.pivot_offset = l.size * 0.5
 	l.position = from - l.size * 0.5
-	l.scale = Vector2.ONE * 1.25
-	var ctrl := from.lerp(to, 0.3) + Vector2(0, -160)
+	l.scale = Vector2.ONE * 0.4
+	_tally_flying += 1
+	var ctrl := from.lerp(to, 0.5) + Vector2(0, -80)
+	var big := 1.0 + 0.15 * tier
 	var tw := l.create_tween()
-	tw.tween_interval(0.22)
+	# 先在地块上方弹出（回弹放大），停一拍，再沿弧线飞向计数槽
+	tw.tween_property(l, "scale", Vector2.ONE * big, 0.16).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_interval(0.12)
 	tw.tween_method(func(t: float):
 		var u := 1.0 - t
 		var p := from * u * u + ctrl * 2.0 * u * t + to * t * t
 		l.position = p - l.size * 0.5
-		l.scale = Vector2.ONE * lerpf(1.25, 0.6, t)
-		l.modulate.a = 1.0 if t < 0.85 else (1.0 - t) / 0.15, 0.0, 1.0, 0.5).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+		l.scale = Vector2.ONE * lerpf(big, 0.55, t), 0.0, 1.0, 0.36).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
 	tw.tween_callback(func():
 		l.queue_free()
-		_bump_score(amount))
+		_tally_flying = maxi(0, _tally_flying - 1)
+		_tally_set(_tally_val + amount)
+		_punch(_tally, 1.18 + 0.08 * tier)
+		if tier == 2:
+			Fx.shake(board, 3.0, 0.2))
 
 
 func _bump_score(amount: int) -> void:
@@ -1050,12 +1208,23 @@ func _bump_score(amount: int) -> void:
 		_goal_flare()
 
 
+var _bar_tw: Tween
+
+
 func _refresh_score_only() -> void:
 	var shown := run.score if _score_shown < 0 else _score_shown
 	var tgt := run.target() if _score_shown < 0 else _score_target
 	lbl_score.text = "%s / %s" % [Pulse.big(shown), Pulse.big(tgt)]
 	bar.max_value = tgt
-	bar.value = mini(shown, tgt)
+	var v := float(mini(shown, tgt))
+	if Game.reduce_motion or absf(v - bar.value) < 0.5:
+		bar.value = v
+	else:
+		# 进度条平滑填充
+		if _bar_tw and _bar_tw.is_valid():
+			_bar_tw.kill()
+		_bar_tw = bar.create_tween()
+		_bar_tw.tween_property(bar, "value", v, 0.25).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 
 
 ## 数字/控件的冲击：放大后弹回。
@@ -1070,7 +1239,7 @@ func _punch(c: Control, amount: float = 1.25) -> void:
 
 ## 达标：季节铭牌金光一闪 + 一圈金屑。
 func _goal_flare() -> void:
-	Game.sfx(&"win", 1.3)
+	Game.sfx(&"goal")
 	if Game.reduce_motion:
 		return
 	var tw := stats_box.create_tween()
@@ -1097,34 +1266,207 @@ func _goal_flare() -> void:
 	t2.tween_callback(p.queue_free)
 
 
-## 收尾：牌型和整树倍率像印章一样砸下，分数滚到最终值。
+## 牌型的颜色与音高（逐个点亮时用）。
+const PATTERN_FX := {
+	&"long": [Color("#9CB86A"), 1.0], &"star": [Color("#7FB2D6"), 1.12], &"loop": [Color("#E6B85C"), 1.25],
+	&"line": [Color("#B9A6E8"), 1.33], &"sym": [Color("#F0D9A0"), 1.5],
+}
+
+
+## 收尾，分四拍：① 牌型逐个点亮；② 整树倍率重击（基础 × 倍率 = 总数，按数额分档给顿帧 / 推镜 / 闪光）；
+## ③ 计数槽整笔飞进季节铭牌、进度条平滑填满，越过目标出「达标」横幅、越过 ×10 / ×100 出「超额」印章；④ 收起。
+## 按住空格加速。
 func _score_finale(res: Pulse.Result, final: int, target_before: int) -> void:
-	var names: Array[String] = []
+	var fast := Input.is_key_pressed(KEY_SPACE)
+	# ① 牌型
+	var k := 0
 	for pat in res.patterns:
-		names.append(pat.label)
-	if not names.is_empty() or res.total_mult != 1.0:
-		var txt := "、".join(names)
-		if res.total_mult != 1.0:
-			txt += ("　" if txt != "" else "") + "×" + Pulse.num(res.total_mult)
-		await _stamp_text(txt)
+		if k >= 4:
+			break
+		var fxp: Array = PATTERN_FX.get(pat.id, [Palette.GOLD, 1.0])
+		board.flash_cells(pat.cells, fxp[0], 0.9)
+		Game.sfx(&"pattern", fxp[1])
+		_float_label(pat.label, _tally_center() + Vector2(0, 92 + 34 * k), fxp[0].lightened(0.2), 26)
+		k += 1
+		await get_tree().create_timer(0.16 if fast else 0.34).timeout
 		if not is_inside_tree():
 			return
+	# ② 倍率重击
+	var gained := final - _score_shown
+	if res.total_mult != 1.0 and _tally:
+		_tally_sub.text = "基础 × 整树倍率"
+		_tally_set(res.raw_total, "  ×" + Pulse.num(res.total_mult))
+		_punch(_tally, 1.25)
+		Game.sfx(&"slam", 1.2, -4.0)
+		await get_tree().create_timer(0.14 if fast else 0.3).timeout
+		if not is_inside_tree():
+			return
+		var tw0 := create_tween()
+		tw0.tween_method(func(v: float): _tally_set(int(round(v))), float(res.raw_total), float(gained), 0.3).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_IN)
+		await tw0.finished
+		if not is_inside_tree():
+			return
+		if _tally_sub:
+			_tally_sub.text = "本回合收获"
+	elif _tally:
+		_tally_set(gained)
+	# 数额分档：相对本季目标
+	var ratio := float(gained) / float(maxi(1, target_before))
+	if ratio >= 1.0:
+		Game.sfx(&"boom")
+		board.flash_screen(Color("#FFE6A8"), 1.0)
+		board.shockwave(Color("#FFD27A"))
+		board.punch_camera(0.08)
+		Fx.shake(board, 5.0, 0.4)
+		_punch(_tally, 1.5)
+		await Fx.hitstop(get_tree(), 0.09)
+	elif ratio >= 0.3:
+		Game.sfx(&"slam")
+		board.punch_camera(0.05)
+		Fx.shake(board, 3.0, 0.28)
+		_punch(_tally, 1.35)
+		await Fx.hitstop(get_tree(), 0.06, 0.15)
+	else:
+		Fx.shake(board, 1.6, 0.18)
+		_punch(_tally, 1.2)
+	if not is_inside_tree():
+		return
+	# ③ 整笔飞进季节铭牌
+	if _tally and gained > 0:
+		await get_tree().create_timer(0.1 if fast else 0.22).timeout
+		if not is_inside_tree():
+			return
+		var from := _tally_center()
+		var to := lbl_score.global_position + lbl_score.size * 0.5
+		var tl := _tally
+		var ts := _tally_sub
+		_tally = null
+		_tally_sub = null
+		if ts:
+			ts.queue_free()
+		var twf := tl.create_tween()
+		twf.tween_method(func(t: float):
+			tl.position = from.lerp(to, t) - tl.size * 0.5 + Vector2(0, -120.0 * sin(t * PI))
+			tl.scale = Vector2.ONE * lerpf(1.0, 0.4, t), 0.0, 1.0, 0.32 if fast else 0.42).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+		await twf.finished
+		tl.queue_free()
+		if not is_inside_tree():
+			return
+	_tally_close()
 	var was := _score_shown
 	var tw := create_tween()
 	tw.tween_method(func(v: float):
+		var prev := _score_shown
 		_score_shown = int(round(v))
-		_refresh_score_only(), float(_score_shown), float(final), 0.35).set_trans(Tween.TRANS_CUBIC)
+		_refresh_score_only()
+		_check_overkill(prev, _score_shown, target_before), float(_score_shown), float(final), 0.45).set_trans(Tween.TRANS_CUBIC)
 	await tw.finished
 	if not is_inside_tree():
 		return
+	_punch(lbl_score, 1.35)
 	if was < target_before and final >= target_before:
 		_goal_flare()
-	_punch(lbl_score, 1.35)
-	await get_tree().create_timer(0.25).timeout
+		await _banner("达 标", Color("#FFE7A0"))
+	else:
+		await get_tree().create_timer(0.25).timeout
 	if not is_inside_tree():
 		return
 	_score_shown = -1
 	_refresh_score_only()
+
+
+## 分数滚动时越过目标的 10 倍、100 倍、1000 倍：当场盖「超额」印章。
+func _check_overkill(prev: int, now: int, target: int) -> void:
+	if target <= 0:
+		return
+	for tier in [1, 2, 3]:
+		var line := target * int(pow(10, tier))
+		if prev < line and now >= line:
+			Game.sfx(&"overkill", 1.0 + 0.1 * tier)
+			_stamp_text("超额 ×%d！" % int(pow(10, tier)))
+			board.flash_screen(Color("#FFE6A8"), 0.6)
+
+
+## 横幅：牌桌上一条墨色长条，大字从中间展开（达标、季节开场）。
+func _banner(txt: String, col: Color, hold: float = 0.6, sub: String = "") -> void:
+	if Game.reduce_motion:
+		return
+	var bar_c := ColorRect.new()
+	bar_c.color = Color(Palette.INK, 0.82)
+	bar_c.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	fly_layer.add_child(bar_c)
+	var c := _tally_center() + Vector2(0, 200)
+	bar_c.size = Vector2(1200, 132 if sub != "" else 120)
+	bar_c.position = c - bar_c.size * 0.5
+	bar_c.pivot_offset = bar_c.size * 0.5
+	bar_c.scale = Vector2(0.0, 1.0)
+	var l := Label.new()
+	l.text = txt
+	l.add_theme_font_override("font", Palette.title_for(txt))
+	l.add_theme_font_size_override("font_size", 76)
+	l.add_theme_color_override("font_color", col)
+	l.add_theme_color_override("font_outline_color", Color(Palette.INK, 1.0))
+	l.add_theme_constant_override("outline_size", 10)
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	fly_layer.add_child(l)
+	l.reset_size()
+	l.pivot_offset = l.size * 0.5
+	l.position = c - l.size * 0.5 + Vector2(0, -12 if sub != "" else 0)
+	l.scale = Vector2.ONE * 1.8
+	l.modulate.a = 0.0
+	var sl: Label = null
+	if sub != "":
+		sl = Label.new()
+		sl.text = sub
+		sl.add_theme_font_size_override("font_size", 20)
+		sl.add_theme_color_override("font_color", Palette.CREAM)
+		sl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		fly_layer.add_child(sl)
+		sl.reset_size()
+		sl.position = c + Vector2(-sl.size.x * 0.5, 34)
+		sl.modulate.a = 0.0
+	var tw := create_tween()
+	tw.tween_property(bar_c, "scale:x", 1.0, 0.18).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tw.parallel().tween_property(l, "scale", Vector2.ONE, 0.24).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT).set_delay(0.06)
+	tw.parallel().tween_property(l, "modulate:a", 1.0, 0.12).set_delay(0.06)
+	if sl:
+		tw.parallel().tween_property(sl, "modulate:a", 1.0, 0.2).set_delay(0.15)
+	tw.tween_interval(hold)
+	tw.tween_property(bar_c, "modulate:a", 0.0, 0.25)
+	tw.parallel().tween_property(l, "modulate:a", 0.0, 0.25)
+	if sl:
+		tw.parallel().tween_property(sl, "modulate:a", 0.0, 0.25)
+	await tw.finished
+	bar_c.queue_free()
+	l.queue_free()
+	if sl:
+		sl.queue_free()
+
+
+## 一行浮字：弹出、上飘、淡出（牌型名、放牌的预计增量、共鸣升层）。
+func _float_label(txt: String, at: Vector2, col: Color, fs: int = 24, rise: float = 30.0, life: float = 1.0) -> void:
+	if Game.reduce_motion:
+		return
+	var l := Label.new()
+	l.text = txt
+	l.add_theme_font_override("font", Palette.title_for(txt))
+	l.add_theme_font_size_override("font_size", fs)
+	l.add_theme_color_override("font_color", col)
+	l.add_theme_color_override("font_outline_color", Color(Palette.INK, 0.9))
+	l.add_theme_constant_override("outline_size", 8)
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	fly_layer.add_child(l)
+	l.reset_size()
+	l.pivot_offset = l.size * 0.5
+	l.position = at - l.size * 0.5
+	l.scale = Vector2.ONE * 0.6
+	l.modulate.a = 0.0
+	var tw := l.create_tween()
+	tw.tween_property(l, "scale", Vector2.ONE, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.parallel().tween_property(l, "modulate:a", 1.0, 0.12)
+	tw.tween_property(l, "position:y", l.position.y - rise, life).set_trans(Tween.TRANS_SINE)
+	tw.parallel().tween_property(l, "modulate:a", 0.0, life * 0.5).set_delay(life * 0.5)
+	tw.tween_callback(l.queue_free)
 
 
 ## 牌桌中央盖一枚大字印章（牌型、倍率）。
@@ -1275,6 +1617,15 @@ func _show_phase_modal() -> void:
 			for i in run.reward_options.size():
 				btns.append({"card": run.reward_options[i], "fn": _choose_reward.bind(i)})
 			btns.append({"label": "跳过，得 %d 养分" % Rules.SKIP_REWARD_SAP, "fn": _skip_reward})
+			# 传说之选的开场：暗场、金光冲击波、横幅，然后才发牌
+			if not Game.reduce_motion:
+				board.flash_screen(Color("#FFE6A8"), 0.8)
+				board.shockwave(Palette.GOLD.lightened(0.3))
+				Game.sfx(&"banner")
+				Game.sfx(&"overkill", 0.8)
+				await _banner("传 说 之 选", Color("#FFE08A"), 0.7, "神树结出了一枚传说的种子")
+				if not is_inside_tree():
+					return
 			_open_modal("传说之选",
 				"度过天灾，神树结出一枚传说的种子。传说牌不一定数值更高，但每张都会改写一条规则。选一张加入牌组，然后进入集市。", btns)
 		RunState.Phase.REWARD:
@@ -1462,8 +1813,47 @@ func _relic_button(b: Dictionary) -> Button:
 
 
 func _choose_reward(i: int) -> void:
+	var id: StringName = run.reward_options[i]
+	var src: Control = null
+	for ch in modal_btns.get_children():
+		if ch is CardView and (ch as CardView).card_id == id:
+			src = ch
 	run.choose_reward(i)
+	if src and not Game.reduce_motion:
+		# 选中的牌飞进牌库，牌库计数跳一下
+		var cv := CardView.make(id)
+		cv.draggable = false
+		cv.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		fly_layer.add_child(cv)
+		cv.size = Vector2(CardView.W, CardView.H)
+		cv.global_position = src.global_position
+		cv.pivot_offset = cv.size * 0.5
+		modal.visible = false
+		Game.sfx(&"reward")
+		await _fly(cv, deck_pile.global_position + deck_pile.size * 0.5, 0.5)
+		if not is_inside_tree():
+			return
+		Game.sfx(&"click", 1.4)
+		_punch(deck_pile, 1.25)
+		await get_tree().create_timer(0.25).timeout
+		if not is_inside_tree():
+			return
 	_after_season()
+
+
+## 让一个控件沿弧线飞到 to（全局坐标），边飞边缩小，到了就删掉。
+func _fly(c: Control, to: Vector2, dur: float) -> void:
+	var from := c.global_position + c.size * 0.5
+	var ctrl := from.lerp(to, 0.5) + Vector2(0, -180)
+	var tw := c.create_tween()
+	tw.tween_property(c, "scale", Vector2.ONE * 1.12, 0.12).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_method(func(t: float):
+		var u := 1.0 - t
+		c.global_position = from * u * u + ctrl * 2.0 * u * t + to * t * t - c.size * 0.5
+		c.scale = Vector2.ONE * lerpf(1.12, 0.25, t)
+		c.rotation = deg_to_rad(-12.0 * t), 0.0, 1.0, dur).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+	await tw.finished
+	c.queue_free()
 
 
 func _skip_reward() -> void:
@@ -1475,8 +1865,35 @@ func _choose_relic(i: int) -> void:
 	if run.relics_full():
 		_ask_replace(i)
 		return
+	var rid: StringName = run.relic_options[i]
 	run.choose_relic(i)
+	await _relic_gain_fx(rid)
+	if not is_inside_tree():
+		return
 	_after_relic_ui()
+
+
+## 新器物：版画从弹窗飞进器物栏，落座时闪光。
+func _relic_gain_fx(rid: StringName) -> void:
+	if Game.reduce_motion or relic_bar == null:
+		return
+	modal.visible = false
+	var art := ArtView.new()
+	art.art_id = rid
+	art.mode = 1
+	art.size = Vector2(96, 96)
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	fly_layer.add_child(art)
+	art.global_position = get_viewport_rect().size * 0.5 - art.size * 0.5
+	art.pivot_offset = art.size * 0.5
+	Game.sfx(&"reward", 0.9)
+	relic_bar.set_relics(run.relics)
+	await _fly(art, relic_bar.slot_global_center(rid), 0.5)
+	if not is_inside_tree():
+		return
+	Game.sfx(&"win", 1.5)
+	relic_bar.flash([rid])
+	await get_tree().create_timer(0.35).timeout
 
 
 ## 器物之后：可能还有传说三选一，否则去集市。

@@ -51,6 +51,7 @@ func _ready() -> void:
 	board.cell_hovered.connect(_on_hover)
 	add_child(board)
 	board.set_mood(run.season, &"")
+	Game.scene_audio(&"market", run.season)
 
 	# 上方：装备槽（右键出售）
 	relic_bar = RelicBar.new()

@@ -540,7 +540,9 @@ func is_tough_at(n: TreeNode) -> bool:
 
 
 ## 现在释放会得到多少（不修改状态）。
-func pending_release(extra_mult: float = 1.0) -> int:
+func pending_release(extra_mult: float = -1.0) -> int:
+	if extra_mult < 0.0:
+		extra_mult = _break_mult()
 	var bonus: float = Pulse.SEAL_RES[res_tier(&"seal")] + (0.25 if has_relic(&"signet") else 0.0)
 	var total := 0
 	for n: TreeNode in tree.nodes.values():
@@ -556,7 +558,15 @@ func pending_release(extra_mult: float = 1.0) -> int:
 
 
 ## 释放牌桌上全部封存：存量 ×(1 + 每次封存的倍率 × 次数)，计入本季累计。返回释放量。
-func release_seals(extra_mult: float = 1.0) -> int:
+## 解印在牌桌上时，季末的普通释放也再乘这个倍率。
+func _break_mult() -> float:
+	for n: TreeNode in tree.nodes.values():
+		if not n.is_seed() and n.def().release_on_prune > 0.0:
+			return Rules.BREAK_PASSIVE_MULT
+	return 1.0
+
+
+func release_seals(extra_mult: float = -1.0) -> int:
 	var total := pending_release(extra_mult)
 	for n: TreeNode in tree.nodes.values():
 		n.stored = 0

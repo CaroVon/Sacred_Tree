@@ -15,5 +15,5 @@ price = 7
 rarity = 2
 family = Array[StringName]([&"star"])
 keywords = Array[StringName]([&"timing"])
-desc = "末端（不流出）；逆行：星辰牌把每一回合都当作本季最后一回合（流星、满月这类看回合的牌，每回合都按最后一回合结算）"
+desc = "末端（不流出）；逆行：星辰牌的回合倒着数——第 1 回合按本季最后一回合算，最后一回合按第 1 回合算（流星、满月这类看回合的牌改在季初爆发）"
 retro = true

@@ -22,6 +22,10 @@ func _go(runs: int) -> void:
 	game = root.get_node("Game")
 	# 开发工具不碰玩家的收藏与解锁：用只在内存里的 profile
 	game.profile = Profile.load_from("")
+	# 开发工具静音（不在玩家的音箱里放音乐）
+	game.music_volume = 0.0
+	game.ambience_volume = 0.0
+	game.apply_volumes()
 	# 默认关闭动画加速；传 anim 参数时保留动画以覆盖动画路径
 	game.reduce_motion = not OS.get_cmdline_user_args().has("anim")
 	var summary := []

@@ -160,7 +160,7 @@ const CATEGORY_NAMES := ["传导", "分枝", "末端", "相邻", "嫁接", "时�
 @export_group("传说：改写规则")
 ## 浴火（凤凰羽）：牌桌上有它时，剪下 / 烧掉回到手牌的牌当回合就能再打出。
 @export var burn_fresh: bool = false
-## 逆行：星辰牌把每一回合都当作本季最后一回合。
+## 逆行：星辰牌的回合倒着数（第 1 回合按最后一回合算）。
 @export var retro: bool = false
 ## 永动机：齿轮牌把牌桌上其他齿轮牌都算作相邻（最多 link_all_cap 张）。
 @export var link_all: bool = false

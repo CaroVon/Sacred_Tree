@@ -169,7 +169,7 @@ func test_bellows_ash_anvil() -> void:
 	var cm := _ctx()
 	cm.maturity = true
 	a.age = 2
-	check_eq(Pulse.resolve(tree, cm).out[Hex.DIRS[3]], int(floor(1 * 1.5)))
+	check_eq(Pulse.resolve(tree, cm).out[Hex.DIRS[3]], int(floor(1 * Cards.get_def(&"forge_anvil").current_value(2))))
 	a.age = 99
 	check_eq(Cards.get_def(&"forge_anvil").current_value(99), 1.0)
 

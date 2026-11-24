@@ -15,5 +15,5 @@ price = 3
 rarity = 0
 family = Array[StringName]([&"seal"])
 keywords = Array[StringName]([&"store"])
-desc = "向左右分枝；每次脉动给相邻封印牌的存量 +3"
-seal_feed = 3
+desc = "向左右分枝；每次脉动给相邻封印牌的存量 +5"
+seal_feed = 5

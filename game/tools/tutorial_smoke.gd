@@ -37,6 +37,10 @@ func _go() -> void:
 	game = root.get_node("Game")
 	# 开发工具不碰玩家的收藏与解锁：用只在内存里的 profile
 	game.profile = Profile.load_from("")
+	# 开发工具静音（不在玩家的音箱里放音乐）
+	game.music_volume = 0.0
+	game.ambience_volume = 0.0
+	game.apply_volumes()
 	game.reduce_motion = true
 	var save_before: bool = FileAccess.file_exists(game.SAVE_PATH)
 	var save_text: String = FileAccess.get_file_as_string(game.SAVE_PATH) if save_before else ""

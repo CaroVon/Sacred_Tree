@@ -48,7 +48,7 @@ func test_phoenix_makes_pruned_cards_playable() -> void:
 	check(not s.targets_for_hand(0).is_empty(), "可以立即打出")
 
 
-func test_retro_makes_every_turn_last() -> void:
+func test_retro_reverses_turns() -> void:
 	var tree := TreeModel.create(5)
 	Growth.place(tree, &"star_meteor", Hex.DIRS[1], _t([Vector2i.ZERO], 1))
 	var c := _ctx()
@@ -59,8 +59,8 @@ func test_retro_makes_every_turn_last() -> void:
 	var t1 := Pulse.resolve(tree, c).total
 	c.turn = 5
 	var t5 := Pulse.resolve(tree, c).total
-	check_eq(t1, t5, "逆行：第 1 回合等于最后一回合")
-	check(t1 > before, "逆行让流星提前爆发")
+	check(t1 > before, "逆行让流星在第 1 回合爆发")
+	check(t5 < t1, "逆行：最后一回合按第 1 回合算")
 
 
 func test_perpetual_links_all_gears() -> void:

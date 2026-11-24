@@ -70,6 +70,9 @@ var _stamp_col: Color = Palette.OCHRE
 
 ## 震动强度 0..1（Fx.shake 驱动）。
 var shake_t: float = 0.0
+## 震动幅度（Fx.shake 按传入的力度设置；1 = 默认）。
+var shake_amp: float = 1.0
+var _flow_depth: int = 0
 
 var _buds: Array = []
 var hex_size: float = 34.0
@@ -170,6 +173,7 @@ func play_pulse(snapshot: TreeModel, res: Pulse.Result, sound: bool = true) -> v
 		md = maxi(md, n.depth)
 	_anim_dur = (md + 1) * STEP + TAIL
 	anim_t = 0.0
+	_flow_depth = 0
 	_anim_tips_done = {}
 	if sound:
 		Game.sfx(&"pulse")
@@ -230,6 +234,11 @@ func _process(delta_t: float) -> void:
 		# 脉动中按住空格：2 倍速
 		anim_t += delta_t * (2.0 if Input.is_key_pressed(KEY_SPACE) else 1.0)
 		var reached := anim_t / STEP
+		# 养分每推进一层深度，「滴」一声，音高逐层升高
+		var depth_now := int(reached)
+		if depth_now > _flow_depth:
+			_flow_depth = depth_now
+			Game.sfx(&"flow", minf(2.4, 0.9 + 0.09 * depth_now), -8.0)
 		for k in anim_pulse.tip_list:
 			if not _anim_tips_done.has(k) and reached >= anim_tree.at(k).depth + 1:
 				_anim_tips_done[k] = anim_t

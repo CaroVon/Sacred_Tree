@@ -122,3 +122,15 @@ func test_transform_never_same_card() -> void:
 		var out := RunEvents.apply(s, [{"op": "transform", "n": 1}])
 		for line in out:
 			check(not line.begins_with("枯枝变成了枯枝") and not line.begins_with("茎变成了茎"), line)
+
+
+func test_seal_break_passive_release() -> void:
+	var s := _bare_run()
+	Growth.place(s.tree, &"seal_box", Hex.DIRS[0], _t([Vector2i.ZERO], 0))
+	var box := s.tree.at(Hex.DIRS[0])
+	box.stored = 10
+	box.sealed = 1
+	Growth.place(s.tree, &"seal_break", Hex.DIRS[2], _t([Vector2i.ZERO], 2))
+	var rate: float = Cards.get_def(&"seal_box").seal_rate + Pulse.SEAL_RES[s.res_tier(&"seal")]
+	check_eq(s.pending_release(), int(floor(10 * (1.0 + rate) * Rules.BREAK_PASSIVE_MULT)))
+	check_eq(s.pending_release(1.0), int(floor(10 * (1.0 + rate))), "explicit multiplier skips the passive")

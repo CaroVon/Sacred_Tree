@@ -16,6 +16,10 @@ func _run(scene: String, out: String, turns: int, run_seed: int) -> void:
 	var game = root.get_node("Game")
 	# 开发工具不碰玩家的收藏与解锁：用只在内存里的 profile
 	game.profile = Profile.load_from("")
+	# 开发工具静音（不在玩家的音箱里放音乐）
+	game.music_volume = 0.0
+	game.ambience_volume = 0.0
+	game.apply_volumes()
 	game.run = RunState.create(run_seed)
 	root.content_scale_size = Vector2i(1920, 1080)
 	root.content_scale_mode = Window.CONTENT_SCALE_MODE_CANVAS_ITEMS
@@ -44,6 +48,12 @@ func _run(scene: String, out: String, turns: int, run_seed: int) -> void:
 		game.run.year = 3
 		game.run.season = 4
 		game.run.score = 327000000
+	for x in OS.get_cmdline_user_args():
+		if x.begins_with("season="):
+			game.run.season = int(x.substr(7))
+		if x.begins_with("calamity="):
+			game.run.season = 5
+			game.run.calamity = StringName(x.substr(9))
 	if scene == "event":
 		game.run.phase = RunState.Phase.EVENT
 		game.run.event_id = &"wanderer"
@@ -71,6 +81,8 @@ func _run(scene: String, out: String, turns: int, run_seed: int) -> void:
 	var t1 := Time.get_ticks_msec()
 	while Time.get_ticks_msec() - t1 < 1500:
 		await process_frame
+	if OS.get_cmdline_user_args().has("fps"):
+		print("FPS ", Engine.get_frames_per_second())
 	await RenderingServer.frame_post_draw
 	var img := root.get_texture().get_image()
 	img.save_png(out)

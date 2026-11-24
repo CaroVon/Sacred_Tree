@@ -32,6 +32,9 @@ func _go() -> void:
 	# 开发工具不碰玩家的收藏与解锁：用只在内存里的 profile
 	game.profile = Profile.load_from("")
 	game.volume = 0.0
+	game.music_volume = 0.0
+	game.ambience_volume = 0.0
+	game.apply_volumes()
 	# 截图过程会触发自动存档，先备份玩家的存档，结束后还原
 	_backup = FileAccess.get_file_as_string(game.SAVE_PATH) if FileAccess.file_exists(game.SAVE_PATH) else ""
 

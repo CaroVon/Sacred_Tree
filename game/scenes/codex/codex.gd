@@ -34,6 +34,7 @@ var _loop_alive := true
 
 
 func _ready() -> void:
+	Game.scene_audio(&"codex")
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var margin := MarginContainer.new()
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)

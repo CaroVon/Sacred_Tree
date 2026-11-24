@@ -28,6 +28,7 @@ func _ready() -> void:
 	add_child(board)
 	board.set_state(run.tree, run.preview(), {}, false, {})
 	board.set_mood(run.season, &"")
+	Game.scene_audio(&"event", run.season)
 	var veil := ColorRect.new()
 	veil.color = Color(Palette.INK, 0.35)
 	veil.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)

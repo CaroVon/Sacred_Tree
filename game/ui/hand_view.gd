@@ -191,7 +191,7 @@ func sync(ids: Array) -> void:
 		for k in n:
 			var tw := create_tween()
 			tw.tween_interval(maxf(0.01, _slots[fresh[k]].delay))
-			tw.tween_callback(Game.sfx.bind(&"click", 1.5 + 0.08 * k))
+			tw.tween_callback(Game.sfx.bind(&"draw", 0.9 + 0.06 * k))
 
 
 func _make_card(id: StringName) -> CardView:
