@@ -126,10 +126,11 @@ func _ready() -> void:
 			upd_v.call())
 	var bq := _btn(v, "退出", false)
 	bq.pressed.connect(func(): get_tree().quit())
+	bq.visible = not OS.has_feature("web")  # 网页里关不掉标签页，按钮没有意义
 	first.grab_focus.call_deferred()
 
 	var sign := Label.new()
-	sign.text = "一局三年 · 每年春夏秋冬加一场天灾 · 三年之后神树成年"
+	sign.text = "一局三年 · 每年春夏秋冬加一场天灾 · 三年之后神树成年    v%s 预览版" % ProjectSettings.get_setting("application/config/version", "0.1")
 	sign.theme_type_variation = &"SoftLabel"
 	sign.add_theme_font_size_override("font_size", 15)
 	sign.add_theme_color_override("font_color", Palette.INK.lightened(0.2))

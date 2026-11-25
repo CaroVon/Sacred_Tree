@@ -25,6 +25,22 @@ func _shot(name: String) -> void:
 	root.get_texture().get_image().save_png(shots.path_join(name + ".png"))
 
 
+## 每一拍：有气泡卡；指定了目标的，聚光矩形非空且在屏幕内。
+func _check_beat(sc, tut: Tutorial, n: int) -> void:
+	var bt: Dictionary = tut.beat(sc.run, {"sel": sc.run.hand[sc.sel] if sc.sel >= 0 else &"", "prune_mode": sc.prune_mode})
+	if bt.is_empty():
+		return
+	_expect(sc.coach.visible, "第 %d 拍聚光层没有显示（%s）" % [n, bt.action])
+	if bt.target == "":
+		return
+	var rects: Array = sc.coach.current_rects()
+	_expect(not rects.is_empty(), "第 %d 拍目标 %s 找不到（%s）" % [n, bt.target, bt.action])
+	var vp: Rect2 = sc.get_viewport_rect()
+	for r: Rect2 in rects:
+		_expect(vp.encloses(r.grow(-2)), "第 %d 拍目标 %s 超出屏幕 %s" % [n, bt.target, r])
+	print("beat %02d  step %d  %-8s %s" % [n, tut.step + 1, bt.target, bt.action])
+
+
 func _expect(cond: bool, msg: String) -> void:
 	if not cond:
 		problems.append(msg)
@@ -50,17 +66,35 @@ func _go() -> void:
 	var tut: Tutorial = game.tutorial
 	var run: RunState = game.run
 
+	if sc.coach == null:
+		print("PROBLEM: 聚光层没有创建（脚本编译失败？）")
+		quit(1)
+		return
 	# 第一步是说明：此时不能结束回合
 	sc._end_turn()
 	_expect(run.turn == 1, "说明步骤里不应能结束回合")
-	await _shot("tut_01_intro")
 	var guard := 0
-	var shot_steps := {1: "tut_02_stem", 4: "tut_05_fruit", 6: "tut_07_vine", 9: "tut_10_prune"}
-	while run.phase == RunState.Phase.PLAY and guard < 60:
+	var beat_no := 0
+	while run.phase == RunState.Phase.PLAY and guard < 120:
 		guard += 1
+		await _wait(8)
+		# 脉动演出期间聚光层隐藏，等它结束
+		var g2 := 0
+		while sc.board.is_animating() and g2 < 600:
+			await process_frame
+			g2 += 1
+		await _wait(4)
+		beat_no += 1
+		_check_beat(sc, tut, beat_no)
+		await _shot("beat_%02d" % beat_no)
 		var st := tut.current()
-		if st.get("info", false):
-			sc.tut_next.pressed.emit()
+		if tut.needs_continue():
+			if tut.is_free():
+				sc._tut_continue()
+				sc._end_turn()
+			else:
+				_expect(sc.coach.has_continue(), "第 %d 拍应显示「继续」按钮" % beat_no)
+				sc.tut_next.pressed.emit()
 		elif st.has("cards"):
 			var want: StringName = st.cards[0]
 			# 不允许的牌应当被禁用
@@ -72,9 +106,10 @@ func _go() -> void:
 			if i < 0:
 				break
 			sc._select(i)
-			await _wait()
-			if shot_steps.has(tut.step):
-				await _shot(shot_steps[tut.step])
+			await _wait(6)
+			beat_no += 1
+			_check_beat(sc, tut, beat_no)
+			await _shot("beat_%02d" % beat_no)
 			var tg: Dictionary = sc._targets()
 			_expect(not tg.is_empty(), "第 %d 步 %s 没有可放的位置" % [tut.step + 1, want])
 			if tg.is_empty():
@@ -82,9 +117,10 @@ func _go() -> void:
 			sc._on_cell_clicked(tg.keys()[0])
 		elif st.has("prune"):
 			sc._toggle_prune()
-			await _wait()
-			if shot_steps.has(tut.step):
-				await _shot(shot_steps[tut.step])
+			await _wait(6)
+			beat_no += 1
+			_check_beat(sc, tut, beat_no)
+			await _shot("beat_%02d" % beat_no)
 			# 剪树心旁的茎不应被允许
 			for n: TreeNode in run.tree.nodes.values():
 				if n.type == &"stem":
@@ -97,9 +133,8 @@ func _go() -> void:
 					break
 		else:
 			sc._end_turn()
-		await _wait()
 	await _wait(6)
-	await _shot("tut_11_done")
+	await _shot("beat_end")
 	_expect(run.phase == RunState.Phase.REWARD, "指导结束时应在春季末")
 	_expect(sc.modal.visible and sc.modal_title.text == "新手指导完成", "应显示指导完成弹窗")
 	var save_after: bool = FileAccess.file_exists(game.SAVE_PATH)

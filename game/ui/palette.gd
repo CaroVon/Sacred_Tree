@@ -92,13 +92,14 @@ static func accent_color(key: StringName) -> Color:
 
 
 static func _load_font(path: String) -> Font:
-	var f := FontFile.new()
-	if f.load_dynamic_font(path) == OK:
-		return f
+	# 先走导入资源（导出包里只有它，网页版没有原始 .ttf）；编辑器外裸跑时再读原文件
 	if ResourceLoader.exists(path):
 		var r = load(path)
 		if r is Font:
 			return r
+	var f := FontFile.new()
+	if FileAccess.file_exists(path) and f.load_dynamic_font(path) == OK:
+		return f
 	return null
 
 

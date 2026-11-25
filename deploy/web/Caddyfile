@@ -1,0 +1,17 @@
+{
+	admin off
+}
+
+:{$PORT:8080} {
+	root * /srv
+	# wasm / pck / js 压缩传输（wasm 39MB → 约 9MB）
+	encode zstd gzip
+	# 跨源隔离：单线程导出并不需要，但开着以后切多线程版也能直接用
+	header {
+		Cross-Origin-Opener-Policy "same-origin"
+		Cross-Origin-Embedder-Policy "require-corp"
+	}
+	# 每次都向服务器确认（ETag 没变就 304，不重下）：pck / wasm 文件名不随版本变，发新版后不会串版本
+	header Cache-Control "no-cache"
+	file_server
+}

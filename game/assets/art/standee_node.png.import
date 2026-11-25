@@ -15,9 +15,9 @@ dest_files=["res://.godot/imported/standee_node.png-0ee4d82b97c86d0c13fac0840eab
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
-compress/lossy_quality=0.7
+compress/lossy_quality=0.82
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0
 compress/hdr_compression=1

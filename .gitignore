@@ -5,3 +5,5 @@ balance_out/
 
 __pycache__/
 *.pyc
+deploy/web/public/
+dist/

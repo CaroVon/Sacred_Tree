@@ -39,6 +39,7 @@ var _env: Environment
 var _cam: Camera3D
 var _light: DirectionalLight3D
 var _ground: MeshInstance3D
+static var COMPAT: bool = RenderingServer.get_current_rendering_method() == "gl_compatibility"
 var _ground_mat: ShaderMaterial
 var _land_root: Node3D
 var _wood_root: Node3D
@@ -230,6 +231,11 @@ func _build_ground() -> void:
 	_ground_mat.set_shader_parameter("radius", float(board_radius()))
 	# 透明物体按距离排序；台面、地貌、接触阴影永远先画，立牌才不会被台面的半透明盖住
 	_ground_mat.render_priority = -30
+	# 兼容渲染器（网页版）的光照更亮更平：台面压暗、调透，免得盖成一块发绿的圆盘
+	if COMPAT:
+		_ground_mat.set_shader_parameter("base_alpha", 0.72)
+		_ground_mat.set_shader_parameter("tint", Color(0.36, 0.33, 0.28))
+		_ground_mat.set_shader_parameter("fade_out", 4.5)
 	_ground.material_override = _ground_mat
 	_ground.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_world.add_child(_ground)

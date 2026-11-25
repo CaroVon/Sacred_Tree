@@ -1,6 +1,6 @@
 # 神树 · Godot 项目
 
-Godot 4.7.2（GDScript，Compatibility 渲染）。规则层 `core/` 与表现层 `ui/`、`scenes/` 完全分离。
+Godot 4.7.2（GDScript；桌面 Forward+ 渲染，网页与移动端自动用 Compatibility）。规则层 `core/` 与表现层 `ui/`、`scenes/` 完全分离。
 
 美术方向：**失落文明的古典典藏图册**。
 把植物从自然界里的普通物种，转化成某个虚构古代文明的神圣符号——
@@ -16,6 +16,16 @@ tools/godot/Godot_v4.7.2-stable_win64.exe -e --path game         # 打开编辑�
 ```
 操作：点选或拖拽手牌到发光格；数字键 1–5 选牌，空格结束回合（脉动中按住空格 2 倍速），按住 Tab 看图解视图，P 修剪，R 重抽，L 记录，H 规则，Esc 取消。
 主菜单可切换“减少动效”和音量（存于 `user://settings.cfg`）。所有动效都服从“减少动效”。
+
+## 发布
+```sh
+python game/tools/release/fetch_templates.py   # 首次：只下载网页与 Windows 导出模板（约 250MB）
+winget install JRSoftware.InnoSetup            # 首次：安装包制作工具
+bash game/tools/release/build_release.sh       # 产物在 dist/：安装包、免安装 zip、网页 zip
+bash game/tools/release/deploy.sh              # 网页版部署到 Railway（需先 railway login / init）
+```
+版本号在 `project.godot` 的 `config/version`；同步改 `export_presets.cfg` 里 Windows 预设的 `file_version` / `product_version`。
+玩家下载说明见 `deploy/RELEASE_NOTES.md`（发布页文案）。
 
 ## 测试与工具
 ```sh

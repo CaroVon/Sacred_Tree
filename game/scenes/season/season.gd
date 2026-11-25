@@ -67,11 +67,12 @@ var modal_text: Label
 var modal_btns: HFlowContainer
 ## 新手指导（没有则为 null）与它的提示面板。
 var tut: Tutorial
-var tut_panel: PrintBox
 var rules_panel: PrintBox
-var tut_title: Label
-var tut_text: Label
 var tut_next: Button
+var coach: CoachMark
+var _tut_target: String = ""
+var _tut_action: String = ""
+var _tut_beat_key: String = ""
 
 
 func _ready() -> void:
@@ -629,6 +630,8 @@ func _refresh() -> void:
 
 	_refresh_hand()
 	_refresh_hint()
+	if tut:
+		_refresh_tutorial()
 
 	for ch in log_box.get_children():
 		ch.queue_free()
@@ -704,6 +707,8 @@ func _refresh_hint() -> void:
 		hint.text = "照现在的预计，本季打完约 %s，还差 %s。再搭一个嫁接点、换上更强的末梢，或者花养分重抽。" % [Pulse.big(run.projected_total()), Pulse.big(run.target() - run.projected_total())]
 	elif tut == null and Rules.is_winter(run.season) and not run.wither_preview().is_empty():
 		hint.text = "冬季：标着「季末枯萎」的 %d 个最老末梢会在季末离开牌桌（刻「坚韧」或移栽可以保住）。" % run.wither_preview().size()
+	elif tut and _tut_action != "":
+		hint.text = "新手指导：" + _tut_action
 	else:
 		hint.text = "选一张手牌开始生长，或者直接结束回合让神树脉动。"
 
@@ -1533,7 +1538,10 @@ func _unhandled_input(e: InputEvent) -> void:
 		return
 	match e.keycode:
 		KEY_SPACE, KEY_ENTER:
-			_end_turn()
+			if tut and tut.needs_continue() and coach and coach.has_continue():
+				_tut_continue()
+			else:
+				_end_turn()
 		KEY_P:
 			_toggle_prune()
 		KEY_T:
@@ -1966,58 +1974,110 @@ func _to_menu() -> void:
 # ---------- 新手指导 ----------
 
 func _build_tutorial() -> void:
-	# 指导面板替换侧栏里的规则说明
-	tut_panel = PrintBox.new()
-	tut_panel.shadow_color = Palette.OCHRE
-	tut_panel.shadow_offset = Vector2(6, 6)
-	tut_panel.padding = 16
-	left_col.add_child(tut_panel)
-	left_col.move_child(tut_panel, 1)
-	tut_panel.border_color = Palette.INK
+	# 指导全部放在画面引导层的气泡卡里；侧栏的规则说明收起，给牌桌让出注意力
 	rules_panel.visible = false
-	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 10)
-	tut_panel.add_child(v)
-	tut_title = Label.new()
-	tut_title.theme_type_variation = &"TitleLabel"
-	tut_title.add_theme_font_size_override("font_size", 24)
-	tut_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	v.add_child(tut_title)
-	tut_text = Label.new()
-	tut_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	v.add_child(tut_text)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 12)
-	v.add_child(row)
-	tut_next = Button.new()
-	tut_next.text = "继续"
-	tut_next.theme_type_variation = &"PrimaryButton"
-	tut_next.pressed.connect(func():
-		tut.next()
-		_refresh())
-	row.add_child(tut_next)
-	var skip := Button.new()
-	skip.text = "跳过指导"
-	skip.pressed.connect(_skip_tutorial)
-	row.add_child(skip)
+	coach = CoachMark.new()
+	add_child(coach)
+	move_child(coach, modal.get_index())
+	coach.targets_fn = func() -> Array: return _tut_rects(_tut_target)
+	coach.hold_fn = func() -> bool: return board.is_animating() or modal.visible or _tally != null
+	coach.continue_pressed.connect(_tut_continue)
+	coach.skip_pressed.connect(_skip_tutorial)
+	tut_next = coach.continue_button()
 	tut.step_changed.connect(_refresh_tutorial)
 	_refresh_tutorial()
 
 
-func _refresh_tutorial() -> void:
-	if tut == null or tut_panel == null:
+func _tut_continue() -> void:
+	if tut == null or not tut.needs_continue():
 		return
-	var st := tut.current()
-	tut_title.text = "新手指导 %d/%d · %s" % [tut.step + 1, tut.steps.size(), st.title]
-	tut_text.text = st.text
-	tut_next.visible = tut.is_info()
-	if tut.is_info():
-		tut_next.grab_focus.call_deferred()
-	Game.sfx(&"click", 0.8)
+	tut.next(run)
+	_refresh()
+
+
+## 按当前状态重算这一拍，更新气泡卡、聚光目标和顶部提示栏。
+func _refresh_tutorial() -> void:
+	if tut == null or coach == null:
+		return
+	var ui := {"sel": run.hand[sel] if sel >= 0 and sel < run.hand.size() else &"", "prune_mode": prune_mode}
+	var bt := tut.beat(run, ui)
+	if bt.is_empty():
+		_tut_target = ""
+		_tut_action = ""
+		coach.hide_beat()
+		return
+	var key := "%d|%s|%s" % [tut.step, bt.action, bt.target]
+	if key == _tut_beat_key:
+		return
+	var first := _tut_beat_key == ""
+	_tut_beat_key = key
+	_tut_target = bt.target
+	_tut_action = CoachMark.plain(bt.action)
+	var terms := tut.take_new_terms([bt.action, bt.why])
+	coach.show_beat("新手指导 · 第 %d / %d 步" % [tut.step + 1, tut.steps.size()], bt.action, bt.why, terms, bt.cont)
+	# 指到牌桌上的东西时让它们闪一下
+	var cells := _tut_cells(bt.target)
+	if not cells.is_empty() and not bt.target == "cells":
+		board.flash_cells(cells, Palette.GOLD.lightened(0.3), 1.0)
+	if not first:
+		Game.sfx(&"click", 0.8)
+	_refresh_hint()
+
+
+## 目标格（牌桌上的目标），非牌桌目标返回空。
+func _tut_cells(target: String) -> Array:
+	var out: Array = []
+	if target == "seed":
+		out.append(TreeModel.SEED_KEY)
+	elif target == "tips":
+		out.append_array(board.pulse.tip_list if board.pulse else [])
+	elif target == "cells":
+		out.append_array(_targets().keys())
+	elif target.begins_with("node:"):
+		var want := StringName(target.substr(5))
+		for n: TreeNode in run.tree.nodes.values():
+			if n.type == want:
+				out.append(n.key)
+	return out
+
+
+## 目标的全局矩形（聚光层每帧调用）。
+func _tut_rects(target: String) -> Array:
+	var out: Array = []
+	if target == "":
+		return out
+	if target.begins_with("card:"):
+		var want := StringName(target.substr(5))
+		for ch in hand_view.cards():
+			if ch.card_id == want and not ch.disabled:
+				# 手牌是扇形，下半截在屏幕外：只聚光看得见的部分
+				out.append(ch.get_global_rect().intersection(get_viewport_rect().grow(-4)))
+				break
+		return out
+	var ctl: Control = null
+	match target:
+		"end": ctl = b_end
+		"prune": ctl = b_prune
+		"forecast": ctl = lbl_pulse.get_parent().get_parent()
+		"acts": ctl = lbl_acts.get_parent()
+		"sap": ctl = lbl_sap.get_parent()
+	if ctl:
+		out.append(ctl.get_global_rect())
+		return out
+	if target == "score":
+		out.append(lbl_score.get_parent().get_global_rect().merge(bar.get_global_rect()))
+		return out
+	var xf := board.get_global_transform()
+	var hs := board.hex_size
+	for c in _tut_cells(target):
+		var p: Vector2 = xf * board.center_of(c)
+		out.append(Rect2(p - Vector2(hs, hs) * 0.95, Vector2(hs, hs) * 1.9))
+	return out
 
 
 func _finish_tutorial_modal() -> void:
-	tut_panel.visible = false
+	if coach:
+		coach.hide_beat()
 	_open_modal("新手指导完成",
 		"你已经学会了神树的全部基本操作。正式对局里还有这些：
 "
